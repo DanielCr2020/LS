@@ -48,12 +48,12 @@ void getFlagsAndDirs(int argc, char** inputArgs, char* outputFlags, char** outpu
 
 //these will be populated with information from ls(), and then sorted and printed
 
-typedef struct {
+typedef struct itemInDir {
     char* name;
     bool isDir;
 } itemInDir;        //each item in a directory
 
-typedef struct {
+typedef struct folderInfo {
     char* header;      //If printing the directory path above the contents
     itemInDir* items;
     int itemCount;      //number of items in directory
@@ -67,31 +67,28 @@ int ls(char* flags, int dirCount, char** dirs){     //run ls with all the select
     folderInfo folders[dirCount];
 
     for(int i=0;i<dirCount;i++){        //main loop. ls for one directory
-
-        if(dirCount>1){
+        //get number of entries in the directory. We need this number so that we know how much space to allocate
+        //for the struct
+        size_t itemsInDir=0;
+        dp=opendir(dirs[i]);
+        if(!dp){       //we cannot open this directory, so move on to the next one.
+            fprintf(stderr,"ls: cannot access '%s': %s\n",dirs[i],strerror(errno));
+            continue;
+        }
+        else{
+            while((dirp=readdir(dp))!=NULL){
+                itemsInDir++;
+            }
+        }
+        if(dp && dirCount>1){
             folders[i].header=strndup(dirs[i],1024);
             strcat(folders[i].header,":\n");
         }
         else{
             folders[i].header=strdup("");
-        }     
-        //get number of entries in the directory. We need this number so that we know how much space to allocate
-        //for the struct
-        size_t itemsInDir=0;
-        dp=opendir(dirs[i]);
-        // puts("here1");
-        if(!dp){       //we cannot open this directory, so move on to the next one.
-            fprintf(stderr,"Error: Cannot open directory '%s'. %s\n",dirs[i],strerror(errno));
-            continue;
         }
-        else{
-            while((dirp=readdir(dp))!=NULL){
-                // puts("here2");
-                itemsInDir++;
-            }
-        }
-            
         closedir(dp);
+        // printf("dirs[i]: %s\n",dirs[i]);
 
         folders[i].itemCount=itemsInDir;
         
@@ -110,7 +107,7 @@ int ls(char* flags, int dirCount, char** dirs){     //run ls with all the select
         //ls logic
         while((dirp=readdir(dp))!=NULL){
             struct stat fileStat;
-            strncpy(&path[dirNameLen],dirp->d_name,1024);
+            strncpy(&path[dirNameLen],dirp->d_name,1024);       //strcat won't work. 
             stat(path, &fileStat);
             if(S_ISDIR(fileStat.st_mode)==1){
                 // printf("%s%s%s   ",GREEN,dirp->d_name,DEFAULT);
@@ -131,9 +128,9 @@ int ls(char* flags, int dirCount, char** dirs){     //run ls with all the select
     //print the structs
     for(int i=0;i<dirCount;i++){
         // printf("itemcount: %d\n",folders[i].itemCount);
-
-        printf("%s",folders[i].header);
-        free(folders[i].header);
+        if(folders[i].header){
+            printf("%s",folders[i].header);
+        }
         for(int j=0;j<folders[i].itemCount;j++){
             if(folders[i].items[j].isDir==true){
                 printf("%s%s%s   ",GREEN, folders[i].items[j].name, DEFAULT);
@@ -141,13 +138,18 @@ int ls(char* flags, int dirCount, char** dirs){     //run ls with all the select
             else if(folders[i].items[j].isDir==false){
                 printf("%s   ",folders[i].items[j].name);
             }
-            free(folders[i].items);
             free(folders[i].items[j].name);
         }
-        printf("\n");
-        if(i!=dirCount-1){
+        if(folders[i].header){      
+            printf("\n");           
+        }
+        //these folders[i].headers checks are so that we don't have (null) or extra newlines
+        //printed when there is no such file or directory
+        if(i<dirCount-1 && folders[i].header){
             printf("\n");
         }
+        free(folders[i].items);
+        free(folders[i].header);
     }
     return 0;
 }
