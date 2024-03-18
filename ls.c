@@ -62,7 +62,8 @@ typedef struct itemInDir {
 } itemInDir;        //each item in a directory
 
 typedef struct folderInfo {
-    char* header;      //If printing the directory path above the contents
+    bool hasHeader;    //If printing the directory path above the contents
+    char* header;      //If we are, what is it?
     itemInDir* items;
     int itemCount;      //number of items in directory
     bool isPrintable;   //used for proper line breaks
@@ -100,8 +101,7 @@ void ls(char* const flags, int argDirCount, size_t* validDirCount, char** const 
             }
         }
         if(dp && argDirCount>1){       //if we pass more than one directory, list the path above the contents of that directory
-            folders[i].header=strndup(dirs[i],1024);        //this is the header
-            strcat(folders[i].header,":\n");
+            folders[i].header=strndup(dirs[i],1024);    //set the header equal to the dir path
         }
         else{                       //valid folder, but just one, so don't list the path
             folders[i].header=strdup("\0");     //A file name can't be null (I don't think)
@@ -161,7 +161,7 @@ void printLS(size_t argDirCount, size_t validDirCount, folderInfo* folders){
             if(i!=0){       //since newlines between dirs are structed as \n,header\n,contents\n, we don't print a newline at the start,
                 printf("\n");       //since that would create an extra newline at the top of the printed dirs
             }
-            printf("%s",printableFolders[i].header);
+            printf("%s:\n",printableFolders[i].header);
         }
         for(int j=0;j<printableFolders[i].itemCount;j++){       //print each item in each printable folder, colorzing directories as blue
             if(printableFolders[i].items[j].isDir==true){
