@@ -57,20 +57,73 @@ void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char**
 //these will be populated with information from ls(), and then sorted and printed
 
 typedef struct itemInDir {
-    char* name;
+    char* name;     //name of the file itself
+    char* path;     //path to file - used for stat()
     bool isDir;
 } itemInDir;        //each item in a directory
 
 typedef struct folderInfo {
     bool hasHeader;    //If printing the directory path above the contents
     char* header;      //If we are, what is it?
+    //char* folderPath;   //Absolute path to the folder
     itemInDir* items;
     int itemCount;      //number of items in directory
-    bool isPrintable;   //used for proper line breaks
+    bool doWePrint;   //do we print the contents of this folder?
 } folderInfo;        //one folder read by ls
 
 /**
- * The ls logic itself. Populates the structs above with information about folders and files in those folders so we can print them.
+ * @brief Given all the dirs, tells us which dirs we actually need to run ls on
+ * @param inputDirs: The 2D array of directories passed in through argv
+ * @param outputDirs: A 2D array of dirs that we actually need to run ls on. Modified by function.
+ */
+void whichDirs(char** const inputDirs, char** outputDirs){
+
+}
+
+/**
+ * @brief In a given directory, which items do we need to run ls on
+ * Also gives us the path to the items to make stat() easier
+ * @param dir The current directory we are searching through 
+ * @param flags Flags from argv. If 'a' or 'A' are in the flags, for example, that will affect the outputItems
+ * @param outputItems The items in that folder that will be listed when the dir contents are printed
+ */
+void whichItems(char* const dir, char* const flags, itemInDir* outputItems){
+    struct dirent* dirp;
+    DIR* dp;
+    dp=opendir(dir);
+    if(!dp){        //if we cannot open the directory, print the error immediately.
+        fprintf(stderr,"ls: cannot access '%s': %s",dir,strerror(errno));
+        return;
+    }
+    int index=0;
+    while((dirp=readdir(dp))!=NULL){
+        if(!strchr(flags,'a')){             //if 'a' is not a given flag
+            if(dirp->d_name[0]=='.'){       //skip entries that start with .
+                continue;
+            }
+        }
+        else if(strchr(flags,'A')!=NULL){   //if 'A' is a given flag, only exclude . and ..
+            if(strcmp(dirp->d_name,".")==0 || strcmp(dirp->d_name,"..")==0){
+                continue;
+            }
+        }
+        char itemPath[PATH_MAX];
+        strncpy(itemPath,dir,PATH_MAX);
+        size_t dirnameLen=strnlen(dir,PATH_MAX-1);
+        if(itemPath[dirnameLen-1]!='/'){
+            itemPath[dirnameLen]='/';
+            dirnameLen++;
+        }
+        // outputItems[index]=malloc(sizeof(itemInDir));
+        outputItems[index].name=strndup(dirp->d_name,256);
+        outputItems[index].path=strndup(itemPath,PATH_MAX);
+        index++;
+    }
+}
+
+
+/**
+ * @brief The ls logic itself. Populates the structs above with information about folders and files in those folders so we can print them.
  * @param flags: The flags string. Currently, no functionality for flags is implemented yet
  * @param argDirCount: number of dirs passed in through argv. Not all can be used, since some may not exist or have bad permissions.
  * @param printDirCount: number of directories we actually print the contents of. Modified by the function.
@@ -93,7 +146,7 @@ void ls(char* const flags, int argDirCount, size_t* printDirCount, char** const 
                 printf("\n");
             }
             (*printDirCount)--;     //used for knowing how many dirs we actually need to print
-            folders[i].isPrintable=false;
+            folders[i].doWePrint=false;
             continue;
         }
         else{
@@ -138,13 +191,13 @@ void ls(char* const flags, int argDirCount, size_t* printDirCount, char** const 
             folders[i].items[fileIndex].name=strndup(dirp->d_name,256);
             fileIndex++;
         }
-        folders[i].isPrintable=true;
         closedir(dp);
+        folders[i].doWePrint=true;
     }
 }
 
 /**
- * Using the structs we populated earlier, print the information to the screen, coloring directories as blue.
+ * @brief Using the structs we populated earlier, print the information to the screen, coloring directories as blue.
  * @param argDirCount: Number of directories passed in through argv
  * @param printDirCount: Number of directories we can actually print
  * @param folders: The folder structs we filled in with ls() 
@@ -153,7 +206,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders){
     //we only care about the folders we can actually print
     folderInfo* printableFolders=malloc(printDirCount*sizeof(folderInfo));
     for(int i=0,j=0;i<argDirCount;i++){     //copy over folders we need to print, skipping ones we don't
-        if(folders[i].isPrintable){
+        if(folders[i].doWePrint){
             memcpy(&printableFolders[j],&folders[i],sizeof(folderInfo));
             j++;
         }
