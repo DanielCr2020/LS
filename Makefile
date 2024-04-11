@@ -1,4 +1,4 @@
 all:
-	gcc ls.c -o ls -Wall  -g
+	gcc ls.c -o ls -Wall -g
 clean:
 	rm ls
