@@ -38,7 +38,8 @@ void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char**
         if(inputArgs[i][0]=='-'){
             isFlag=true;
         }
-        for(int j=0;j<strnlen(inputArgs[i],1024);j++){        //loop over each character in a given argument
+        //loop over each character in a given argument
+        for(int j=0;j<strnlen(inputArgs[i],1024);j++){
             if(isFlag && inputArgs[i][j]!='-'){
                 (outputFlags[*flagCount])=inputArgs[i][j];
                 // printf("flag: %c\n",outputFlags[*flagCount]);
@@ -63,20 +64,20 @@ typedef struct itemInDir {
 } itemInDir;        //each item in a directory
 
 typedef struct folderInfo {
-    bool hasHeader;    //If printing the directory path above the contents
-    char* header;      //If we are, what is it?
-    //char* folderPath;   //Absolute path to the folder
-    itemInDir* items;
+    bool hasHeader;     //If printing the directory path above the contents
+    char* header;       //If we are, what is it?
+    //char* folderPath; //Absolute path to the folder
+    itemInDir* items;   //array of item info structures for that directory
     int itemCount;      //number of items in directory
-    bool doWePrint;   //do we print the contents of this folder?
-} folderInfo;        //one folder read by ls
+    bool doWePrint;     //do we print the contents of this folder?
+} folderInfo;           //one folder read by ls
 
 /**
  * @brief Given all the dirs, tells us which dirs we actually need to run ls on
  * @param inputDirs: The 2D array of directories passed in through argv
  * @param outputDirs: A 2D array of dirs that we actually need to run ls on. Modified by function.
  */
-void whichDirs(char** const inputDirs, char** outputDirs){
+void whichDirs(char** const inputDirs, char** outputDirs, int arg){
 
 }
 
@@ -92,7 +93,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems){
     struct dirent* dirp;
     DIR* dp;
     dp=opendir(dir);
-    if(!dp){        //if we cannot open the directory, print the error immediately.
+    if(!dp){
+        //if we cannot open the directory, print the error immediately.
         fprintf(stderr,"ls: cannot access '%s': %s",dir,strerror(errno));
         return 0;
     }
@@ -102,7 +104,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems){
         char* hasa=strchr(flags,'a');
         char* hasA=strchr(flags,'A');
         if(!hasa && !hasA){
-            if(dirp->d_name[0]=='.'){       //skip entries that start with .
+            //skip entries that start with .
+            if(dirp->d_name[0]=='.'){
                 continue;
             }
         }
@@ -129,7 +132,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems){
 
 
 /**
- * @brief The ls logic itself. Populates the structs above with information about folders and files in those folders so we can print them.
+ * @brief The ls logic itself. Populates the structs above with information about folders and files in those 
+ * folders so we can print them.
  * @param flags: The flags string. Currently, no functionality for flags is implemented yet
  * @param argDirCount: number of dirs passed in through argv. Not all can be used, since some may not exist or have bad permissions.
  * @param printDirCount: number of directories we actually print the contents of. Modified by the function.
@@ -137,44 +141,53 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems){
  * @param folders: A (blank) array of structs that contains information we need for printing the contents of a folder. 
  *      Modified by function
 */
-void ls(char* const flags, int argDirCount, size_t* printDirCount, char** const dirs, folderInfo* folders){
+void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** const dirs, folderInfo* folders){
     struct dirent* dirp;
     DIR* dp;
     *printDirCount=argDirCount;
-    for(int i=0;i<argDirCount;i++){        //main loop. ls for one directory
+    //main loop. ls for one directory at a time
+    for(int i=0;i<argDirCount;i++){       
         //get number of items in the directory. We need this number so that we know how much space to alloc
         //for the struct. Accounts for all items, even ones we don't print
         size_t totalItemsInDir=0;
         dp=opendir(dirs[i]);
-        if(!dp){       //we cannot open this directory, so move on to the next one.
+        if(!dp){
+            //we cannot open this directory, so move on to the next one.   
             fprintf(stderr,"ls: cannot access '%s': %s",dirs[i],strerror(errno));
             if(i<argDirCount){
                 printf("\n");
             }
-            (*printDirCount)--;     //If we cannot access the directory, we cannot print it
+            (*printDirCount)--;
+            //If we cannot access the directory, we cannot print it
             folders[i].doWePrint=false;
             continue;
         }
-        else{       //count number of items in the directory
+        else{
+            //count number of items in the directory
             while((dirp=readdir(dp))!=NULL){
                 totalItemsInDir++;
             }
         }
-        if(dp!=NULL && argDirCount>1){       //if we pass more than one directory, list the path above the contents of that directory
+         //if we pass more than one directory, list the path above the contents of that directory
+        if(dp!=NULL && argDirCount>1){      
             folders[i].hasHeader=true;
-            folders[i].header=strndup(dirs[i],PATH_MAX);    //set the header equal to the dir path
+            //set the header equal to the dir path
+            folders[i].header=strndup(dirs[i],PATH_MAX);
         }
-        else{                       //valid folder, but just one, so don't list the path
+        else{
+            //valid folder, but just one, so don't list the path
             folders[i].hasHeader=false;
         }
         closedir(dp);
 
-        folders[i].items=(itemInDir*)malloc(totalItemsInDir*sizeof(itemInDir));      //allocate space for info for each item in dir
+        //allocate space for info for each item in dir
+        folders[i].items=(itemInDir*)malloc(totalItemsInDir*sizeof(itemInDir));
         folders[i].itemCount=whichItems(dirs[i],flags,folders[i].items);
         //See which items are actually directories (colorization)
         for(int j=0;j<folders[i].itemCount;j++){
             struct stat fileStat;
-            if(stat(folders[i].items[j].path, &fileStat)==-1) {          //stat needs an absolute path
+            //stat needs an absolute path
+            if(stat(folders[i].items[j].path, &fileStat)==-1) {
                 fprintf(stderr,"Error: stat(%s) failed: %s\n",folders[i].items->path,strerror(errno));
             }
             if(S_ISDIR(fileStat.st_mode)==1){
@@ -194,26 +207,39 @@ void ls(char* const flags, int argDirCount, size_t* printDirCount, char** const 
  * @param argDirCount: Number of directories passed in through argv
  * @param printDirCount: Number of directories we can actually print
  * @param folders: The folder structs we filled in with ls() 
+ * @param flags: The flags string. 
 */
-void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders){
+void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char* flags){
     //we only care about the folders we can actually print
     folderInfo* printableFolders=malloc(printDirCount*sizeof(folderInfo));
-    for(int i=0,j=0;i<argDirCount;i++){     //copy over folders we need to print, skipping ones we don't
+    for(int i=0,j=0;i<argDirCount;i++){
+        //copy over folders we need to print, skipping ones we don't
         if(folders[i].doWePrint){
             memcpy(&printableFolders[j],&folders[i],sizeof(folderInfo));
             j++;
         }
     }
+
     //print the structs
     for(int i=0;i<printDirCount;i++){
-        if(printableFolders[i].hasHeader){        //if we print more than one dir, we want the path listed above the contents
-            if(i!=0){       //since newlines between dirs are structed as \n,header\n,contents\n, we don't print a newline at the start,
-                printf("\n");       //since that would create an extra newline at the top of the printed dirs
+        //if we print more than one dir, we want the path listed above the contents
+        if(printableFolders[i].hasHeader){
+            //since newlines between dirs are structured as \n,header\n,contents\n, we don't print a newline at the start
+            //since that would create an extra newline at the top of the printed dirs
+            if(i!=0){
+                printf("\n");       
             }
             printf("%s:\n",printableFolders[i].header);
         }
-
-        for(int j=0;j<printableFolders[i].itemCount;j++){       //print each item in each printable folder, colorzing directories as blue
+        //go in reverse if -r flag is specified
+        int startIndex=0;
+        int step=1;
+        if(strchr(flags,'r')){
+            startIndex=printableFolders[i].itemCount-1;
+            step=-1;
+        }
+        //print each item in each printable folder, colorzing directories as blue
+        for(int j=startIndex;step==-1 ? j>=0 : j<printableFolders[i].itemCount;j+=step){
             if(printableFolders[i].items[j].isDir==true){
                 printf("%s%s%s   ",BLUE, printableFolders[i].items[j].name, DEFAULT);
             }
@@ -223,13 +249,16 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders){
             free(printableFolders[i].items[j].name);
             free(printableFolders[i].items[j].path);
         }
-        if(printableFolders[i].itemCount>0){            //don't print a blank line for folders with no items
+        //don't print a blank line for folders with no items
+        if(printableFolders[i].itemCount>0){
             printf("\n");
         }
     }
     
     for(int i=0;i<argDirCount;i++){
-        free(folders[i].header);
+        if(folders[i].hasHeader){
+            free(folders[i].header);
+        }
         free(folders[i].items);
     }
     free(printableFolders);
@@ -255,7 +284,8 @@ int main(int argc, char* argv[]){
     getFlagsAndDirs(argc,args,flags,directories,&flagCount,&argDirCount);
 
     bool needToFree=true;
-    if(argDirCount<1){        //run ls on the current dirctory if we don't provide any directory arguments
+    //run ls on the current dirctory if we don't provide any directory arguments
+    if(argDirCount<1){
         directories[0]=".";
         needToFree=false;
         argDirCount=1;
@@ -264,7 +294,7 @@ int main(int argc, char* argv[]){
     folderInfo* folders=malloc(argDirCount*sizeof(folderInfo));
     ls(flags,argDirCount,&printDirCount,directories,folders);
     // printf("gsd %d\n",printDirCount);
-    printLS(argDirCount,printDirCount,folders);
+    printLS(argDirCount,printDirCount,folders,flags);
     free(folders);
     // printf("\nFlag count: %ld\nDir count: %ld\n",flagCount,argDirCount);
     // puts("Flags:");
