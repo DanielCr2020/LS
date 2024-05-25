@@ -82,7 +82,7 @@ typedef struct folderInfo {
     itemInDir* items;   //array of item info structures for that directory
     int itemCount;      //number of items in directory
     bool doWePrint;     //do we print the contents of this folder?
-    size_t totalSize;   //for -l, shows sum of size of all the items in the directory
+    size_t totalBlocks;   //for -l, shows sum of size of all the items in the directory
 } folderInfo;           //one folder read by ls
 
 /**
@@ -96,8 +96,9 @@ void whichDirs(char** const inputDirs, char** outputDirs, int arg){
 /**
  * @brief Get information used in long list format printing
  * @param item: A pointer to the item information struct. Modified by function.
+ * @param folder: A handle to the current folder, used for getting the total blocks taken up by the items in the folder
  */
-void getLongListItems(itemInDir* item){
+void getLongListItems(itemInDir* item, folderInfo* folder){
     char permissions[]="----------";
     if(item->isDir==true){
         permissions[0]='d';
@@ -130,7 +131,9 @@ void getLongListItems(itemInDir* item){
     item->group=grp->gr_name;
     item->size=fileStat.st_size;
     item->mtime=fileStat.st_mtime;
-    // printf("PERMISSIONS    %s\n",item->permissions);
+
+    folder->totalBlocks+=(fileStat.st_blocks/2);
+    // printf("name: %s   blocks  %ld\n",item->name,fileStat.st_blocks);
 }
 
 /**
@@ -141,7 +144,7 @@ void getLongListItems(itemInDir* item){
  * @param flags Flags from argv. If 'a' or 'A' are in the flags, for example, that will affect the outputItems
  * @param outputItems The items in that folder that will be listed when the dir contents are printed
  */
-int whichItems(char* const dir, char* const flags, itemInDir* outputItems){
+int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folderInfo* folder){
     struct dirent* dirp;
     DIR* dp;
     dp=opendir(dir);
@@ -191,7 +194,7 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems){
 
         char* hasl=strchr(flags,'l');
         if(hasl){
-            getLongListItems(&outputItems[index]);
+            getLongListItems(&outputItems[index],folder);
         }
         index++;
     }
@@ -250,7 +253,7 @@ void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** con
 
         //allocate space for info for each item in dir
         folders[i].items=(itemInDir*)malloc(totalItemsInDir*sizeof(itemInDir));
-        folders[i].itemCount=whichItems(dirs[i],flags,folders[i].items);
+        folders[i].itemCount=whichItems(dirs[i],flags,folders[i].items,&folders[i]);
 
         folders[i].doWePrint=true;
     }
@@ -304,6 +307,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         char* hasl=strchr(flags,'l');
         //print each item in each printable folder, colorzing directories as blue
         if(hasl){
+            printf("total %ld\n",printableFolders[i].totalBlocks);
             for(int j=startIndex;step==-1 ? j>=0 : j<printableFolders[i].itemCount;j+=step){
                 char* timeString;
                 timeString=trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
