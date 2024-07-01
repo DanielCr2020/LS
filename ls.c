@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <time.h>
+#include <math.h>
 
 #define BLUE "\x1b[34;1m"
 #define DEFAULT "\x1b[0m"
@@ -27,7 +28,20 @@ int argSortComp(const void* argA, const void* argB){
 }
 
 /**
-    * Takes in argc and argv, and a bunch of buffers. Sets those buffers to be flags, dirs, and count of each
+ * @brief Counts how many digits are in the input number
+ * @param num: The input number that the number of digits will be calculated for
+ */
+int countDigits(int num){
+    int digits=1;
+    num=abs(num);
+    while((num/=10)>0){
+        digits++;
+    }
+    return digits;
+}
+
+/**
+    * @brief Takes in argc and argv, and a bunch of buffers. Sets those buffers to be flags, dirs, and count of each
     * @param argc: number of arguments passed via command line
     * @param inputArgs: argv, copied by value
     * @param outputFlags: A string where each index is a flag passed in through argv
@@ -288,6 +302,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
 
     //print the structs
     for(int i=0;i<printDirCount;i++){
+        int numItems=printableFolders[i].itemCount;
         //if we print more than one dir, we want the path listed above the contents
         if(printableFolders[i].hasHeader){
             //since newlines between dirs are structured as \n,header\n,contents\n, we don't print a newline at the start
@@ -301,41 +316,59 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         int startIndex=0;
         int step=1;
         if(strchr(flags,'r')){
-            startIndex=printableFolders[i].itemCount-1;
+            startIndex=numItems-1;
             step=-1;
         }
         char* hasl=strchr(flags,'l');
         //print each item in each printable folder, colorzing directories as blue
         if(hasl){
             printf("total %ld\n",printableFolders[i].totalBlocks);
-            for(int j=startIndex;step==-1 ? j>=0 : j<printableFolders[i].itemCount;j+=step){
+            //get max widths
+            int hardLinksMaxWidth=0;
+            int hardLinksWidth[numItems];
+            int sizeMaxWidth=0;
+            int sizeWidth[numItems];
+            for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
+                hardLinksWidth[j]=countDigits(printableFolders[i].items[j].hardLinksCount);
+                if(hardLinksWidth[j]>hardLinksMaxWidth){
+                    hardLinksMaxWidth=hardLinksWidth[j];
+                }
+                sizeWidth[j]=countDigits(printableFolders[i].items[j].size);
+                if(sizeWidth[j]>sizeMaxWidth){
+                    sizeMaxWidth=sizeWidth[j];
+                }
+            }
+            //print
+            for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
                 char* timeString;
                 timeString=trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
                 // printf("Time string 2: %s ",timeString);
-                printf("%s %d %s %s %ld %s %s%s%s",
-                    printableFolders[i].items[j].permissions,
-                    printableFolders[i].items[j].hardLinksCount,
-                    printableFolders[i].items[j].owner,
-                    printableFolders[i].items[j].group,
-                    printableFolders[i].items[j].size,
+
+                //permissions
+                printf("%s ",printableFolders[i].items[j].permissions);
+                //hard links count
+                for(int k=0;k<hardLinksMaxWidth-hardLinksWidth[j];k++){
+                    putchar(' ');
+                }
+                printf("%d ", printableFolders[i].items[j].hardLinksCount);
+                //owner and group
+                printf("%s %s ",printableFolders[i].items[j].owner,printableFolders[i].items[j].group);
+                //size
+                for(int k=0;k<sizeMaxWidth-sizeWidth[j];k++){
+                    putchar(' ');
+                }
+                printf("%ld ", printableFolders[i].items[j].size);
+                printf("%s %s%s%s",
                     timeString,
                     printableFolders[i].items[j].isDir==true ? 
                         BLUE : DEFAULT,
                     printableFolders[i].items[j].name,DEFAULT
-
                 );
-                //colorize durectories as blue
-                if(printableFolders[i].items[j].isDir==true){
-                    // printf(" %s%s%s",BLUE,printableFolders[i].items[j].name,DEFAULT);
-                }
-                else if(printableFolders[i].items[j].isDir==false){
-                    // printf(" %s",printableFolders[i].items[j].name);
-                }
                 
                 if(step==-1 && j>0){
                     printf("\n");
                 }
-                else if(step==1 && j<printableFolders[i].itemCount-1){
+                else if(step==1 && j<numItems-1){
                     printf("\n");
                 }
 
@@ -346,7 +379,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
             }
         }
         else {
-            for(int j=startIndex;step==-1 ? j>=0 : j<printableFolders[i].itemCount;j+=step){
+            for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
                 if(printableFolders[i].items[j].isDir==true){
                     printf("%s%s%s  ",BLUE, printableFolders[i].items[j].name, DEFAULT);
                 }
@@ -358,7 +391,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
             }
         }
         //don't print a blank line for folders with no items
-        if(printableFolders[i].itemCount>0){
+        if(numItems>0){
             printf("\n");
         }
     }
