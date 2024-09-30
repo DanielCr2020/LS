@@ -118,8 +118,8 @@ void getLongListItems(itemInDir* item, folderInfo* folder){
         permissions[0]='d';
     }
     struct stat fileStat;
-    if(stat(item->path,&fileStat)<0){
-        fprintf(stderr,"Error: stat() failed. %s\n",strerror(errno));
+    if(lstat(item->path,&fileStat)<0){
+        fprintf(stderr,"Error: lstat() failed. %s\n",strerror(errno));
     }
     strcpy(&permissions[1], (fileStat.st_mode & S_IRUSR) ? "r" : "-");
     strcpy(&permissions[2], (fileStat.st_mode & S_IWUSR) ? "w" : "-");
@@ -152,7 +152,7 @@ void getLongListItems(itemInDir* item, folderInfo* folder){
 
 /**
  * @brief In a given directory, which items do we need to run ls on
- * Also gives us the path to the items to make stat() easier
+ * Also gives us the path to the items to make lstat() easier
  * Returns number of items to print. Accounts for -a and -A flags. Also checks if an item is a directory.
  * @param dir The current directory we are searching through 
  * @param flags Flags from argv. If 'a' or 'A' are in the flags, for example, that will affect the outputItems
@@ -196,8 +196,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
         (outputItems[index]).path=strndup(itemPath,PATH_MAX);
     
         struct stat fileStat;
-        if(stat(outputItems[index].path,&fileStat)==-1){
-            fprintf(stderr,"Error: stat(%s) failed: %s\n",outputItems[index].path,strerror(errno));
+        if(lstat(outputItems[index].path,&fileStat)==-1){
+            fprintf(stderr,"Error: lstat(%s) failed: %s\n",outputItems[index].path,strerror(errno));
         }
         if(S_ISDIR(fileStat.st_mode)==1){
             outputItems[index].isDir=true;
