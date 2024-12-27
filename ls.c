@@ -304,12 +304,10 @@ void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** con
 
 }
 
-char* trimTime(char* timeString, char* outputString){
-    outputString=calloc(13,sizeof(char));
+void trimTime(char* timeString, char* outputString){
     for(int i=4;i<16;i++){
         outputString[i-4]=timeString[i];
     }
-    return outputString;
 }
 
 /**
@@ -379,12 +377,12 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
             }
             //print
             for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
-                char* timeString;
+                char* timeString=calloc(13,sizeof(char));
                 if(printableFolders[i].items[j].lstatSuccessful==false){
-                    timeString="           ?";
+                    strncpy(timeString,"           ?",13);
                 }
                 else{
-                    timeString=trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
+                    trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
                 }
 
                 //permissions
@@ -437,6 +435,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                 free(printableFolders[i].items[j].name);
                 free(printableFolders[i].items[j].path);
                 free(printableFolders[i].items[j].permissions);
+                free(timeString);
             }
         }
         else {
