@@ -1,6 +1,6 @@
 TARGET=ls
 CC=gcc
-FLAGS=-Wall -Wpedantic -pedantic-errors -g -fstack-protector-all -O2
+FLAGS=-Wall -Wpedantic -pedantic-errors -g -fstack-protector-all
 
 all: $(TARGET)
 

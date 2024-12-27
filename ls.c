@@ -20,6 +20,8 @@
 #define DEFAULT "\x1b[0m"
 #define GREEN "\x1b[32;1m"
 
+#define SENTINEL -1
+
 int argSortComp(const void* argA, const void* argB){
     if(((char*)argA)[0]=='-'){
         return -1;
@@ -33,8 +35,12 @@ int argSortComp(const void* argA, const void* argB){
  */
 int countDigits(int num){
     int digits=1;
-    num=abs(num);
-    while((num/=10)>0){
+    int num1=abs(num);
+    while((num1/=10)>0){
+        digits++;
+    }
+    //add a digit for a negatve number (sentinel value)
+    if(num1!=num){
         digits++;
     }
     return digits;
@@ -87,6 +93,7 @@ typedef struct itemInDir {
     char* group;
     size_t size;    //file size
     long mtime;    //modified time
+    bool lstatSuccessful;
 } itemInDir;        //each item in a directory
 
 typedef struct folderInfo {
@@ -117,9 +124,21 @@ void getLongListItems(itemInDir* item, folderInfo* folder){
     if(item->isDir==true){
         permissions[0]='d';
     }
+    item->permissions=malloc(sizeof(permissions));
     struct stat fileStat;
     if(lstat(item->path,&fileStat)<0){
-        fprintf(stderr,"Error: lstat() failed. %s\n",strerror(errno));
+        // fprintf(stderr,"Error: lstat(%s) failed 1. %s\n",item->path,strerror(errno));
+        item->lstatSuccessful=false;
+        item->hardLinksCount=SENTINEL;
+        strncpy(item->permissions,"-?????????",11);
+        item->owner="?";
+        item->group="?";
+        item->size=SENTINEL; //sentinel value
+        item->mtime=SENTINEL;
+        return;
+    }
+    else {
+        item->lstatSuccessful=true;
     }
     strcpy(&permissions[1], (fileStat.st_mode & S_IRUSR) ? "r" : "-");
     strcpy(&permissions[2], (fileStat.st_mode & S_IWUSR) ? "w" : "-");
@@ -131,7 +150,6 @@ void getLongListItems(itemInDir* item, folderInfo* folder){
     strcpy(&permissions[8], (fileStat.st_mode & S_IWOTH) ? "w" : "-");
     strcpy(&permissions[9], (fileStat.st_mode & S_IXOTH) ? "x" : "-");
 
-    item->permissions=malloc(sizeof(permissions));
     memcpy(item->permissions,permissions,sizeof(permissions));
     item->hardLinksCount=fileStat.st_nlink;
 
@@ -141,12 +159,18 @@ void getLongListItems(itemInDir* item, folderInfo* folder){
     pwd=getpwuid(fileStat.st_uid);
     grp=getgrgid(fileStat.st_gid);
 
-    item->owner=pwd->pw_name;
-    item->group=grp->gr_name;
-    item->size=fileStat.st_size;
-    item->mtime=fileStat.st_mtime;
+    if(item->lstatSuccessful==true){
+        item->owner=pwd->pw_name;
+        item->group=grp->gr_name;
+        item->size=fileStat.st_size;
+        item->mtime=fileStat.st_mtime;
+    }
+
 
     folder->totalBlocks+=(fileStat.st_blocks/2);
+    if(S_ISLNK(fileStat.st_mode)){
+        item->permissions[0]='l';
+    }
     // printf("name: %s   blocks  %ld\n",item->name,fileStat.st_blocks);
 }
 
@@ -167,7 +191,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
         fprintf(stderr,"ls: cannot access '%s': %s",dir,strerror(errno));
         return 0;
     }
-    int index=0;
+    int dirIndex=0;
+    char* hasl=strchr(flags,'l');
     while((dirp=readdir(dp))!=NULL){
         //strchr(flags,'a')==NULL   -> 'a' is not a given flag
         //these cause valgrind errors. Will fix later
@@ -192,28 +217,33 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
             dirnameLen++;
         }
         strncat(itemPath,dirp->d_name,PATH_MAX);
-        (outputItems[index]).name=strndup(dirp->d_name,256);
-        (outputItems[index]).path=strndup(itemPath,PATH_MAX);
+        (outputItems[dirIndex]).name=strndup(dirp->d_name,256);
+        (outputItems[dirIndex]).path=strndup(itemPath,PATH_MAX);
     
         struct stat fileStat;
-        if(lstat(outputItems[index].path,&fileStat)==-1){
-            fprintf(stderr,"Error: lstat(%s) failed: %s\n",outputItems[index].path,strerror(errno));
+        if(lstat(outputItems[dirIndex].path,&fileStat)==-1){
+            fprintf(stderr,"Error: lstat(%s) failed: %s\n",outputItems[dirIndex].path,strerror(errno));
+            outputItems[dirIndex].lstatSuccessful=false;
+            // dirIndex++;
+            // continue;
+        }
+        else {
+            outputItems[dirIndex].lstatSuccessful=true;
         }
         if(S_ISDIR(fileStat.st_mode)==1){
-            outputItems[index].isDir=true;
+            outputItems[dirIndex].isDir=true;
         }
         else{
-            outputItems[index].isDir=false;
+            outputItems[dirIndex].isDir=false;
         }
-
-        char* hasl=strchr(flags,'l');
+        // printf("is link?: %d\n",S_ISLNK(fileStat.st_mode));
         if(hasl){
-            getLongListItems(&outputItems[index],folder);
+            getLongListItems(&outputItems[dirIndex],folder);
         }
-        index++;
+        dirIndex++;
     }
     closedir(dp);
-    return index;
+    return dirIndex;
 }
 
 /**
@@ -324,10 +354,11 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         if(hasl){
             printf("total %ld\n",printableFolders[i].totalBlocks);
             //get max widths
-            int hardLinksMaxWidth=0;
-            int hardLinksWidth[numItems];
-            int sizeMaxWidth=0;
-            int sizeWidth[numItems];
+            int hardLinksMaxWidth=0, hardLinksWidth[numItems];
+            int sizeMaxWidth=0, sizeWidth[numItems];
+            int ownerMaxWidth=0, ownerWidth[numItems];
+            int groupMaxWidth=0, groupWidth[numItems];
+
             for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
                 hardLinksWidth[j]=countDigits(printableFolders[i].items[j].hardLinksCount);
                 if(hardLinksWidth[j]>hardLinksMaxWidth){
@@ -337,12 +368,24 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                 if(sizeWidth[j]>sizeMaxWidth){
                     sizeMaxWidth=sizeWidth[j];
                 }
+                ownerWidth[j]=strnlen(printableFolders[i].items[j].owner,256);
+                if(ownerWidth[j]>ownerMaxWidth){
+                    ownerMaxWidth=ownerWidth[j];
+                }
+                groupWidth[j]=strnlen(printableFolders[i].items[j].group,256);
+                if(groupWidth[j]>groupMaxWidth){
+                    groupMaxWidth=groupWidth[j];
+                }
             }
             //print
             for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
                 char* timeString;
-                timeString=trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
-                // printf("Time string 2: %s ",timeString);
+                if(printableFolders[i].items[j].lstatSuccessful==false){
+                    timeString="           ?";
+                }
+                else{
+                    timeString=trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
+                }
 
                 //permissions
                 printf("%s ",printableFolders[i].items[j].permissions);
@@ -350,14 +393,32 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                 for(int k=0;k<hardLinksMaxWidth-hardLinksWidth[j];k++){
                     putchar(' ');
                 }
-                printf("%d ", printableFolders[i].items[j].hardLinksCount);
-                //owner and group
-                printf("%s %s ",printableFolders[i].items[j].owner,printableFolders[i].items[j].group);
+                if(printableFolders[i].items[j].hardLinksCount<0)
+                    printf("? ");
+                else    
+                    printf("%d ", printableFolders[i].items[j].hardLinksCount);
+
+                //owner
+                printf("%s ",printableFolders[i].items[j].owner);
+                for(int k=0;k<ownerMaxWidth-ownerWidth[j];k++){
+                    putchar(' ');
+                }
+
+                //group
+                printf("%s ",printableFolders[i].items[j].group);
+                for(int k=0;k<groupMaxWidth-groupWidth[j];k++){
+                    putchar(' ');
+                }
+
                 //size
                 for(int k=0;k<sizeMaxWidth-sizeWidth[j];k++){
                     putchar(' ');
                 }
-                printf("%ld ", printableFolders[i].items[j].size);
+                if(printableFolders[i].items[j].size==SENTINEL)
+                    printf("? ");
+                else
+                    printf("%ld ", printableFolders[i].items[j].size);
+                
                 printf("%s %s%s%s",
                     timeString,
                     printableFolders[i].items[j].isDir==true ? 
