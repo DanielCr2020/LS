@@ -1,10 +1,14 @@
-TARGET=ls
+TARGET_EXEC=ls
+SOURCE=ls.c ls.h
 CC=gcc
 FLAGS=-Wall -Wpedantic -pedantic-errors -g -fstack-protector-all
 
-all: $(TARGET)
+all: $(TARGET_EXEC)
 
-ls: ls.c
-	$(CC) ls.c -o ls $(FLAGS)
+ls: $(SOURCE)
+	$(CC) $(SOURCE) -o $(TARGET_EXEC) $(FLAGS)
+
+.PHONY: clean
+
 clean:
-	rm ls
+	rm $(TARGET_EXEC)

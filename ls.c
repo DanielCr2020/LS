@@ -8,19 +8,12 @@
 #include <stddef.h>
 #include <pwd.h>
 #include <grp.h>
-#include <sys/types.h>
 #include <linux/limits.h>
-#include <stdbool.h>
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <time.h>
 #include <math.h>
-
-#define BLUE "\x1b[34;1m"
-#define DEFAULT "\x1b[0m"
-#define GREEN "\x1b[32;1m"
-
-#define SENTINEL -1
+#include "ls.h"
 
 int argSortComp(const void* argA, const void* argB){
     if(((char*)argA)[0]=='-'){
@@ -77,34 +70,6 @@ void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char**
     }
     
 }
-
-//these will be populated with information from ls(), and then sorted and printed
-
-//Contains information about each file in a directory
-typedef struct itemInDir {
-    char* name;     //name of the file itself
-    char* path;     //path to file - used for stat()
-    bool isDir;     //Used for colorization
-
-    char* fileType; //?
-    char* permissions;  //permissions of the file
-    int hardLinksCount;
-    char* owner;
-    char* group;
-    size_t size;    //file size
-    long mtime;    //modified time
-    bool lstatSuccessful;
-} itemInDir;        //each item in a directory
-
-typedef struct folderInfo {
-    bool hasHeader;     //If printing the directory path above the contents
-    char* header;       //If we are, what is it?
-    //char* folderPath; //Absolute path to the folder
-    itemInDir* items;   //array of item info structures for that directory
-    int itemCount;      //number of items in directory
-    bool doWePrint;     //do we print the contents of this folder?
-    size_t totalBlocks;   //for -l, shows sum of size of all the items in the directory
-} folderInfo;           //one folder read by ls
 
 /**
  * @brief Given all the dirs, tells us which dirs we actually need to run ls on
@@ -379,7 +344,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
             for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
                 char* timeString=calloc(13,sizeof(char));
                 if(printableFolders[i].items[j].lstatSuccessful==false){
-                    strncpy(timeString,"           ?",13);
+                    strncpy(timeString,"            ",13);
                 }
                 else{
                     trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
