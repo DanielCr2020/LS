@@ -100,13 +100,13 @@ void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall){
         if(nbytes!=-1){
             struct stat linkStat;
             if(stat(pointsToPath,&linkStat)<0){
-                fprintf(stderr,"stat(%s) on link endpoint failed: %s\n",pointsToPath,strerror(errno));
-                free(pointsTo);
-                free(pointsToPath);
-                return;
+                // fprintf(stderr,"stat(%s) on link endpoint failed: %s\n",pointsToPath,strerror(errno));
+                // free(pointsTo);
+                // free(pointsToPath);
+                // return;
             }
             if(secondCall==false)
-                item->link=calloc(nbytes+1,1);  //memory leak
+                item->link=calloc(nbytes+1,1);
             strncpy(item->link,pointsTo,nbytes);
             strcat(item->link,"\0");
             if(S_ISDIR(linkStat.st_mode)){
@@ -176,6 +176,7 @@ void getLongListInfo(itemInDir* item, folderInfo* folder){
     getLinkInfo(item,fileStat,true);
     if(item->isLink==true){
         item->permissions[0]='l';
+        item->isDir=false;
     }
     // printf("name: %s   blocks  %ld\n",item->name,fileStat.st_blocks);
 }
@@ -200,11 +201,17 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
     int dirIndex=0;
     char* hasl="\0";
     hasl=strchr(flags,'l');
+    //these cause valgrind errors. Will fix later
+    char* hasa="\0";
+    hasa=strchr(flags,'a');
+    char* hasA="\0";
+    hasA=strchr(flags,'A');
     while((dirp=readdir(dp))!=NULL){
+        //sets these to false so they are not set true by garbage values
+        outputItems[dirIndex].isDir=false;
+        outputItems[dirIndex].isLink=false;
         //strchr(flags,'a')==NULL   -> 'a' is not a given flag
-        //these cause valgrind errors. Will fix later
-        char* hasa=strchr(flags,'a');
-        char* hasA=strchr(flags,'A');
+
         if(!hasa && !hasA){
             //skip entries that start with .
             if(dirp->d_name[0]=='.'){
@@ -386,7 +393,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
             for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
                 char* timeString=calloc(13,sizeof(char));
                 if(printableFolders[i].items[j].lstatSuccessful==false){
-                    strncpy(timeString,"            ",13);
+                    strncpy(timeString,"           ?",13);
                 }
                 else{
                     trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
@@ -479,6 +486,9 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                 }
                 free(printableFolders[i].items[j].name);
                 free(printableFolders[i].items[j].path);
+                if(printableFolders[i].items[j].isLink){
+                    free(printableFolders[i].items[j].link);
+                }
             }
         }
         //don't print a blank line for folders with no items
