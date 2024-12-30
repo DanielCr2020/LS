@@ -1,9 +1,11 @@
 #include <sys/types.h>
 #include <stdbool.h>
+#include <sys/stat.h>
 
 #define BLUE "\x1b[34;1m"
 #define DEFAULT "\x1b[0m"
 #define GREEN "\x1b[32;1m"
+#define CYAN "\x1b[36;1m"
 
 #define SENTINEL -1
 
@@ -23,7 +25,10 @@ typedef struct itemInDir {
     size_t size;    //file size
     long mtime;    //modified time
     bool lstatSuccessful;
-    char* link;
+    char* link;     //where the link points to if the file is a link
+    bool pointsToDir;   //if the file is a link, then does the file point to a directory?
+    bool isLink;
+
 } itemInDir;        //each item in a directory
 
 typedef struct folderInfo {
@@ -42,7 +47,9 @@ int countDigits(int num);
 
 void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char** outputDirs, size_t* flagCount, size_t* argDirCount);
 
-void getLongListItems(itemInDir* item, folderInfo* folder);
+void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall);
+
+void getLongListInfo(itemInDir* item, folderInfo* folder);
 
 int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folderInfo* folder);
 

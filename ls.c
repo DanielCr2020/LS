@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>        //strcasecmp
-#include <sys/stat.h>
 #include <stddef.h>
 #include <pwd.h>
 #include <grp.h>
@@ -27,14 +26,17 @@ int argSortComp(const void* argA, const void* argB){
  * @param num: The input number that the number of digits will be calculated for
  */
 int countDigits(int num){
+    if(num==0){
+        return 1;
+    }
     int digits=1;
     int num1=abs(num);
     while((num1/=10)>0){
         digits++;
     }
     //add a digit for a negatve number (sentinel value)
-    if(num1!=num){
-        digits++;
+    if(num<0){
+        // digits++;
     }
     return digits;
 }
@@ -80,11 +82,50 @@ void whichDirs(char** const inputDirs, char** outputDirs, int arg){
 
 }
 /**
+ * @brief Checks if item is a link using S_ISLNK. Only sets item as a link if S_ISLNK is true,
+ * and the file it points to makes sense
+ * @param item: item we check link status and update link information for.
+ * @param fileStat: stat of the file. used to check for link and to get handle to link endpoint
+ * @param secondCall: If this is the second time calling this function per one file. If so,
+ * don't reassign item->link, as that created a memory leak
+ * @returns if item should be considered a link
+ */
+void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall){
+    item->isLink=false;
+    if(S_ISLNK(fileStat.st_mode)){
+        char* pointsTo=calloc(256,1);
+        int nbytes=readlink(item->path,pointsTo,256);
+        char* pointsToPath=realpath(item->path,NULL);
+        // printf("Realpath: %s\n",pointsToPath);
+        if(nbytes!=-1){
+            struct stat linkStat;
+            if(stat(pointsToPath,&linkStat)<0){
+                fprintf(stderr,"stat(%s) on link endpoint failed: %s\n",pointsToPath,strerror(errno));
+                free(pointsTo);
+                free(pointsToPath);
+                return;
+            }
+            if(secondCall==false)
+                item->link=calloc(nbytes+1,1);  //memory leak
+            strncpy(item->link,pointsTo,nbytes);
+            strcat(item->link,"\0");
+            if(S_ISDIR(linkStat.st_mode)){
+                item->pointsToDir=true;
+            }
+            // item->permissions[0]='l';
+        }
+        free(pointsTo);
+        free(pointsToPath);
+        item->isLink=true;
+        item->isDir=false;
+    }
+}
+/**
  * @brief Get information used in long list format printing
  * @param item: A pointer to the item information struct. Modified by function.
  * @param folder: A handle to the current folder, used for getting the total blocks taken up by the items in the folder
  */
-void getLongListItems(itemInDir* item, folderInfo* folder){
+void getLongListInfo(itemInDir* item, folderInfo* folder){
     char permissions[]="----------";
     if(item->isDir==true){
         permissions[0]='d';
@@ -131,9 +172,9 @@ void getLongListItems(itemInDir* item, folderInfo* folder){
         item->mtime=fileStat.st_mtime;
     }
 
-
     folder->totalBlocks+=(fileStat.st_blocks/2);
-    if(S_ISLNK(fileStat.st_mode)){
+    getLinkInfo(item,fileStat,true);
+    if(item->isLink==true){
         item->permissions[0]='l';
     }
     // printf("name: %s   blocks  %ld\n",item->name,fileStat.st_blocks);
@@ -142,7 +183,7 @@ void getLongListItems(itemInDir* item, folderInfo* folder){
 /**
  * @brief In a given directory, which items do we need to run ls on
  * Also gives us the path to the items to make lstat() easier
- * Returns number of items to print. Accounts for -a and -A flags. Also checks if an item is a directory.
+ * @returns number of items to print. Accounts for -a and -A flags. Also checks if an item is a directory.
  * @param dir The current directory we are searching through 
  * @param flags Flags from argv. If 'a' or 'A' are in the flags, for example, that will affect the outputItems
  * @param outputItems The items in that folder that will be listed when the dir contents are printed
@@ -157,7 +198,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
         return 0;
     }
     int dirIndex=0;
-    char* hasl=strchr(flags,'l');
+    char* hasl="\0";
+    hasl=strchr(flags,'l');
     while((dirp=readdir(dp))!=NULL){
         //strchr(flags,'a')==NULL   -> 'a' is not a given flag
         //these cause valgrind errors. Will fix later
@@ -198,12 +240,12 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
         if(S_ISDIR(fileStat.st_mode)==1){
             outputItems[dirIndex].isDir=true;
         }
-        else{
-            outputItems[dirIndex].isDir=false;
-        }
+        //getLinkInfo is called twice because sometimes S_ISLNK thinks something like .gitignore is a link
+        getLinkInfo(&outputItems[dirIndex],fileStat,false);
+
         // printf("is link?: %d\n",S_ISLNK(fileStat.st_mode));
         if(hasl){
-            getLongListItems(&outputItems[dirIndex],folder);
+            getLongListInfo(&outputItems[dirIndex],folder);
         }
         dirIndex++;
     }
@@ -318,7 +360,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
             printf("total %ld\n",printableFolders[i].totalBlocks);
             //get max widths
             int hardLinksMaxWidth=0, hardLinksWidth[numItems];
-            int sizeMaxWidth=0, sizeWidth[numItems];
+            int sizeMaxWidth=1, sizeWidth[numItems];
             int ownerMaxWidth=0, ownerWidth[numItems];
             int groupMaxWidth=0, groupWidth[numItems];
 
@@ -382,12 +424,29 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                 else
                     printf("%ld ", printableFolders[i].items[j].size);
                 
-                printf("%s %s%s%s",
-                    timeString,
-                    printableFolders[i].items[j].isDir==true ? 
-                        BLUE : DEFAULT,
-                    printableFolders[i].items[j].name,DEFAULT
-                );
+                //time
+                printf("%s ", timeString);
+
+                //name
+                //if dir
+                if(printableFolders[i].items[j].isDir==true){
+                    printf("%s%s%s",BLUE,printableFolders[i].items[j].name,DEFAULT);
+                }
+                //if link
+                else if(printableFolders[i].items[j].isLink==true){
+                    printf("%s%s%s -> ",CYAN,printableFolders[i].items[j].name,DEFAULT);
+                    if(printableFolders[i].items[j].pointsToDir==true){
+                        printf("%s%s%s",BLUE,printableFolders[i].items[j].link,DEFAULT);
+                    }
+                    else{
+                        printf("%s",printableFolders[i].items[j].link);
+                    }
+                        //,printableFolders[i].items[j].link);
+                }
+                //if neither
+                else {
+                    printf("%s",printableFolders[i].items[j].name);
+                }
                 
                 if(step==-1 && j>0){
                     printf("\n");
@@ -397,6 +456,9 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                 }
 
                 //cleanup
+                if(printableFolders[i].items[j].isLink){
+                    free(printableFolders[i].items[j].link);
+                }
                 free(printableFolders[i].items[j].name);
                 free(printableFolders[i].items[j].path);
                 free(printableFolders[i].items[j].permissions);
@@ -407,6 +469,10 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
             for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
                 if(printableFolders[i].items[j].isDir==true){
                     printf("%s%s%s  ",BLUE, printableFolders[i].items[j].name, DEFAULT);
+                }
+                //check for link first because the "default" print case should be last
+                else if(printableFolders[i].items[j].isLink==true){
+                    printf("%s%s%s  ",CYAN, printableFolders[i].items[j].name, DEFAULT);
                 }
                 else if(printableFolders[i].items[j].isDir==false){
                     printf("%s  ",printableFolders[i].items[j].name);
