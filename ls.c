@@ -14,6 +14,43 @@
 #include <math.h>
 #include "ls.h"
 
+/*
+    Flags implemented:
+    -A
+    -a
+    -l
+    -r
+    -f: Output is not sorted.
+
+    Flags to do:
+    -c: Use time when file status was last changed, instead of time of last modification of the file for 
+sorting ( −t ) or printing ( −l ).
+    -d: Directories are listed as plain files (not searched recursively) and symbolic links in the argument
+list are not indirected through.
+    -F: Display a slash ( ‘/’ ) immediately after each pathname that is a directory, an asterisk ( ‘∗’ ) after
+each that is executable, an at sign ( ‘@’ ) after each symbolic link, a percent sign ( ‘%’ ) after each
+whiteout, an equal sign ( ‘=’ ) after each socket, and a vertical bar ( ‘|’ ) after each that is a FIFO
+
+    -h: Modifies the −s and −l options, causing the sizes to be reported in bytes displayed in a human
+readable format. Overrides −k.
+    -i: For each file, print the file’s file serial number (inode number).
+    -k: Modifies the −s option, causing the sizes to be reported in kilobytes. The rightmost of the −k and
+−h flags overrides the previous flag. See also −h
+    -n:  The same as −l, except that the owner and group IDs are displayed numerically rather than con-
+verting to a owner or group name.
+    -q: Force printing of non-printable characters in file names as the character ‘?’; this is the default when
+output is to a terminal.
+    -R: Recursively list subdirectories encountered
+    -S: Sort by size, largest file first.
+    -s: Display the number of file system blocks actually used by each file, in units of 512 bytes or
+BLOCKSIZE (see ENVIRONMENT) where partial units are rounded up to the next integer value.
+If the output is to a terminal, a total sum for all the file sizes is output on a line before the listing.
+    -t: Sort by time modified (most recently modified first) before sorting the operands by lexicographical
+order.
+    -u: Use time of last access, instead of last modification of the file for sorting ( −t ) or printing ( −l ) 
+    -w: Force raw printing of non-printable characters. This is the default when output is not to a terminal.
+*/
+
 int argSortComp(const void* argA, const void* argB){
     if(((char*)argA)[0]=='-'){
         return -1;
@@ -100,7 +137,8 @@ void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall){
         if(nbytes!=-1){
             struct stat linkStat;
             if(stat(pointsToPath,&linkStat)<0){
-                // fprintf(stderr,"stat(%s) on link endpoint failed: %s\n",pointsToPath,strerror(errno));
+                // fprintf(stderr,"stat(%s -> %s) on link endpoint failed: %s\n",item->path,pointsToPath,strerror(errno));
+                item->pointsToDir=false;
                 // free(pointsTo);
                 // free(pointsToPath);
                 // return;
@@ -110,6 +148,7 @@ void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall){
             strncpy(item->link,pointsTo,nbytes);
             strcat(item->link,"\0");
             if(S_ISDIR(linkStat.st_mode)){
+                // printf("%s points to dir %s\n",item->name,pointsTo);
                 item->pointsToDir=true;
             }
             // item->permissions[0]='l';
@@ -324,6 +363,20 @@ void trimTime(char* timeString, char* outputString){
     }
 }
 
+int sortByName(const void* name1, const void* name2){
+    return strcmp( ((itemInDir*) name1)->name,((itemInDir*) name2)->name);
+}
+
+/**
+ * @brief Using the folder structs and the flags, sort the folder structs according to the flags
+ * @param folders: folderInfo structs to be sorted
+ * @param flags: processed argv input flags
+ */
+void sortOutput(folderInfo* folders, char* const flags){
+    printf("Flags: %s\n",flags);
+    qsort((folders)->items,(folders)->itemCount,sizeof(itemInDir),sortByName);
+}
+
 /**
  * @brief Using the structs we populated earlier, print the information to the screen, coloring directories as blue.
  * @param argDirCount: Number of directories passed in through argv
@@ -342,6 +395,21 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         }
     }
 
+    char* hasl=strchr(flags,'l');
+    int startIndex=0;
+    int step=1;
+
+    //if no f flag, sort output
+    //if f flag is present, do not sort output
+    if(!strchr(flags,'f')){
+        sortOutput(folders, flags);
+    }
+
+    //handling terminal width
+    struct winsize w;
+    ioctl(STDOUT_FILENO,TIOCGWINSZ,&w);
+    printf("Rows: %d, cols: %d\n",w.ws_row,w.ws_col);
+
     //print the structs
     for(int i=0;i<printDirCount;i++){
         int numItems=printableFolders[i].itemCount;
@@ -350,18 +418,16 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
             //since newlines between dirs are structured as \n,header\n,contents\n, we don't print a newline at the start
             //since that would create an extra newline at the top of the printed dirs
             if(i!=0){
-                printf("\n");       
+                printf("\n");
             }
             printf("%s:\n",printableFolders[i].header);
         }
         //go in reverse if -r flag is specified
-        int startIndex=0;
-        int step=1;
         if(strchr(flags,'r')){
             startIndex=numItems-1;
             step=-1;
         }
-        char* hasl=strchr(flags,'l');
+
         //print each item in each printable folder, colorzing directories as blue
         if(hasl){
             printf("total %ld\n",printableFolders[i].totalBlocks);
@@ -472,6 +538,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                 free(timeString);
             }
         }
+        //don't use long listing format
         else {
             for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
                 if(printableFolders[i].items[j].isDir==true){
@@ -516,7 +583,7 @@ int main(int argc, char* argv[]){
     memcpy(args,argv,argc*sizeof(char*));
     // for(int i=1;i<argc;i++){
         // printf("%s\n",args[i]);
-    char flags[1024];
+    char flags[1024]={'0'};
     char** directories=malloc(argc*sizeof(char*));
 
     size_t flagCount=0;
