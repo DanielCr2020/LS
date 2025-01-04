@@ -8,6 +8,19 @@
 #define CYAN "\x1b[36;1m"
 
 #define SENTINEL -1
+#define max(a,b) a < b ? b : a
+#define keepMax(a,b) a < b ? a=b : a
+
+//maximum widths for each attribute
+typedef struct widthInfo {
+    //int permissionsWidth;
+    int hardLinksWidth;
+    int ownerWidth;
+    int groupWidth;
+    int sizeWidth;
+    //int timeWidth;
+    int nameWidth;
+} widthInfo;
 
 //these will be populated with information from ls(), and then sorted and printed
 
@@ -31,6 +44,7 @@ typedef struct itemInDir {
 
 } itemInDir;        //each item in a directory
 
+//information about one folder we are reading
 typedef struct folderInfo {
     bool hasHeader;     //If printing the directory path above the contents
     char* header;       //If we are, what is it?
@@ -39,6 +53,7 @@ typedef struct folderInfo {
     int itemCount;      //number of items in directory
     bool doWePrint;     //do we print the contents of this folder?
     size_t totalBlocks;   //for -l, shows sum of size of all the items in the directory
+    widthInfo widths;     //width information for each directory
 } folderInfo;           //one folder read by ls
 
 int argSortComp(const void* argA, const void* argB);

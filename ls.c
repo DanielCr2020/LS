@@ -52,7 +52,7 @@ order.
 */
 
 int argSortComp(const void* argA, const void* argB){
-    if(((char*)argA)[0]=='-'){
+    if(((char*)argA)[0] == '-'){
         return -1;
     }
     else return strncasecmp(*(char* const*)argA, *(char* const*)argB, 1024);
@@ -63,12 +63,12 @@ int argSortComp(const void* argA, const void* argB){
  * @param num: The input number that the number of digits will be calculated for
  */
 int countDigits(int num){
-    if(num==0){
+    if(num == 0){
         return 1;
     }
-    int digits=1;
-    int num1=abs(num);
-    while((num1/=10)>0){
+    int digits = 1;
+    int num1 = abs(num);
+    while((num1 /= 10)>0){
         digits++;
     }
     //add a digit for a negatve number (sentinel value)
@@ -88,21 +88,21 @@ int countDigits(int num){
     * @param argDirCount: The number of directories passed in through argv
 */
 void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char** outputDirs, size_t* flagCount, size_t* argDirCount){
-    for(int i=0;i<argc;i++){    //loop over each arg in inputArgs
-        bool isFlag=false;
-        if(inputArgs[i][0]=='-'){
-            isFlag=true;
+    for(int i = 0;i<argc;i++){    //loop over each arg in inputArgs
+        bool isFlag = false;
+        if(inputArgs[i][0] == '-'){
+            isFlag = true;
         }
         //loop over each character in a given argument
-        for(int j=0;j<strnlen(inputArgs[i],1024);j++){
-            if(isFlag && inputArgs[i][j]!='-'){
-                (outputFlags[*flagCount])=inputArgs[i][j];
+        for(int j = 0;j<strnlen(inputArgs[i],1024);j++){
+            if(isFlag && inputArgs[i][j] != '-'){
+                (outputFlags[*flagCount]) = inputArgs[i][j];
                 // printf("flag: %c\n",outputFlags[*flagCount]);
                 (*flagCount)++;
             }
         }
-        if(isFlag==false && i>0){
-            (outputDirs[*argDirCount])=strndup(inputArgs[i],1024);
+        if(isFlag == false && i>0){
+            (outputDirs[*argDirCount]) = strndup(inputArgs[i],1024);
             // printf("dir: %s\n",outputDirs[*argDirCount]);
             (*argDirCount)++;
         }
@@ -128,62 +128,62 @@ void whichDirs(char** const inputDirs, char** outputDirs, int arg){
  * @returns if item should be considered a link
  */
 void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall){
-    item->isLink=false;
+    item->isLink = false;
     if(S_ISLNK(fileStat.st_mode)){
-        char* pointsTo=calloc(256,1);
-        int nbytes=readlink(item->path,pointsTo,256);
-        char* pointsToPath=realpath(item->path,NULL);
+        char* pointsTo = calloc(256,1);
+        int nbytes = readlink(item->path,pointsTo,256);
+        char* pointsToPath = realpath(item->path,NULL);
         // printf("Realpath: %s\n",pointsToPath);
-        if(nbytes!=-1){
+        if(nbytes != -1){
             struct stat linkStat;
             if(stat(pointsToPath,&linkStat)<0){
                 // fprintf(stderr,"stat(%s -> %s) on link endpoint failed: %s\n",item->path,pointsToPath,strerror(errno));
-                item->pointsToDir=false;
+                item->pointsToDir = false;
                 // free(pointsTo);
                 // free(pointsToPath);
                 // return;
             }
-            if(secondCall==false)
-                item->link=calloc(nbytes+1,1);
+            if(secondCall == false)
+                item->link = calloc(nbytes+1,1);
             strncpy(item->link,pointsTo,nbytes);
             strcat(item->link,"\0");
             if(S_ISDIR(linkStat.st_mode)){
                 // printf("%s points to dir %s\n",item->name,pointsTo);
-                item->pointsToDir=true;
+                item->pointsToDir = true;
             }
-            // item->permissions[0]='l';
+            // item->permissions[0] = 'l';
         }
         free(pointsTo);
         free(pointsToPath);
-        item->isLink=true;
-        item->isDir=false;
+        item->isLink = true;
+        item->isDir = false;
     }
 }
 /**
- * @brief Get information used in long list format printing
+ * @brief Get information (for one file) used in long list format printing
  * @param item: A pointer to the item information struct. Modified by function.
  * @param folder: A handle to the current folder, used for getting the total blocks taken up by the items in the folder
  */
 void getLongListInfo(itemInDir* item, folderInfo* folder){
-    char permissions[]="----------";
-    if(item->isDir==true){
-        permissions[0]='d';
+    char permissions[] = "----------";
+    if(item->isDir == true){
+        permissions[0] = 'd';
     }
-    item->permissions=malloc(sizeof(permissions));
+    item->permissions = malloc(sizeof(permissions));
     struct stat fileStat;
     if(lstat(item->path,&fileStat)<0){
         // fprintf(stderr,"Error: lstat(%s) failed 1. %s\n",item->path,strerror(errno));
-        item->lstatSuccessful=false;
-        item->hardLinksCount=SENTINEL;
+        item->lstatSuccessful = false;
+        item->hardLinksCount = SENTINEL;
         strncpy(item->permissions,"-?????????",11);
-        item->owner="?";
-        item->group="?";
-        item->size=SENTINEL; //sentinel value
-        item->mtime=SENTINEL;
+        item->owner = "?";
+        item->group = "?";
+        item->size = SENTINEL; //sentinel value
+        item->mtime = SENTINEL;
         return;
     }
     else {
-        item->lstatSuccessful=true;
+        item->lstatSuccessful = true;
     }
     strcpy(&permissions[1], (fileStat.st_mode & S_IRUSR) ? "r" : "-");
     strcpy(&permissions[2], (fileStat.st_mode & S_IWUSR) ? "w" : "-");
@@ -196,26 +196,32 @@ void getLongListInfo(itemInDir* item, folderInfo* folder){
     strcpy(&permissions[9], (fileStat.st_mode & S_IXOTH) ? "x" : "-");
 
     memcpy(item->permissions,permissions,sizeof(permissions));
-    item->hardLinksCount=fileStat.st_nlink;
+    item->hardLinksCount = fileStat.st_nlink;
+    keepMax(folder->widths.hardLinksWidth,countDigits(item->hardLinksCount));
 
     struct passwd* pwd;
     struct group* grp;
 
-    pwd=getpwuid(fileStat.st_uid);
-    grp=getgrgid(fileStat.st_gid);
+    pwd = getpwuid(fileStat.st_uid);
+    grp = getgrgid(fileStat.st_gid);
 
-    if(item->lstatSuccessful==true){
-        item->owner=pwd->pw_name;
-        item->group=grp->gr_name;
-        item->size=fileStat.st_size;
-        item->mtime=fileStat.st_mtime;
+    if(item->lstatSuccessful == true){
+        item->owner = pwd->pw_name;
+        item->group = grp->gr_name;
+        item->size = fileStat.st_size;
+        item->mtime = fileStat.st_mtime;
+
+        // folder->widths.ownerWidth = max(strnlen(item->owner,256),folder->widths.ownerWidth);
+        keepMax(folder->widths.ownerWidth,strnlen(item->owner,256));
+        keepMax(folder->widths.groupWidth,strnlen(item->group,256));
+        keepMax(folder->widths.sizeWidth,countDigits(item->size));
     }
 
-    folder->totalBlocks+=(fileStat.st_blocks/2);
+    folder->totalBlocks += (fileStat.st_blocks/2);
     getLinkInfo(item,fileStat,true);
-    if(item->isLink==true){
-        item->permissions[0]='l';
-        item->isDir=false;
+    if(item->isLink == true){
+        item->permissions[0] = 'l';
+        item->isDir = false;
     }
     // printf("name: %s   blocks  %ld\n",item->name,fileStat.st_blocks);
 }
@@ -231,61 +237,62 @@ void getLongListInfo(itemInDir* item, folderInfo* folder){
 int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folderInfo* folder){
     struct dirent* dirp;
     DIR* dp;
-    dp=opendir(dir);
+    dp = opendir(dir);
     if(!dp){
         //if we cannot open the directory, print the error immediately.
         fprintf(stderr,"ls: cannot access '%s': %s",dir,strerror(errno));
         return 0;
     }
-    int dirIndex=0;
-    char* hasl="\0";
-    hasl=strchr(flags,'l');
+    int dirIndex = 0;
+    char* hasl = "\0";
+    hasl = strchr(flags,'l');
     //these cause valgrind errors. Will fix later
-    char* hasa="\0";
-    hasa=strchr(flags,'a');
-    char* hasA="\0";
-    hasA=strchr(flags,'A');
-    while((dirp=readdir(dp))!=NULL){
+    char* hasa = "\0";
+    hasa = strchr(flags,'a');
+    char* hasA = "\0";
+    hasA = strchr(flags,'A');
+    while((dirp = readdir(dp)) != NULL){
         //sets these to false so they are not set true by garbage values
-        outputItems[dirIndex].isDir=false;
-        outputItems[dirIndex].isLink=false;
-        //strchr(flags,'a')==NULL   -> 'a' is not a given flag
+        outputItems[dirIndex].isDir = false;
+        outputItems[dirIndex].isLink = false;
+        //strchr(flags,'a') == NULL   -> 'a' is not a given flag
 
         if(!hasa && !hasA){
             //skip entries that start with .
-            if(dirp->d_name[0]=='.'){
+            if(dirp->d_name[0] == '.'){
                 continue;
             }
         }
         if(hasA && hasA>hasa){
-            if(strcmp(dirp->d_name,".")==0 || strcmp(dirp->d_name,"..")==0){
+            if(strcmp(dirp->d_name,".") == 0 || strcmp(dirp->d_name,"..") == 0){
                 continue;
             }
         }
         char itemPath[PATH_MAX+1];      //+1 for newline
         strncpy(itemPath,dir,PATH_MAX);
-        size_t dirnameLen=strnlen(dir,PATH_MAX-1);
-        if(itemPath[dirnameLen-1]!='/'){
-            itemPath[dirnameLen]='/';
+        size_t dirnameLen = strnlen(dir,PATH_MAX-1);
+        if(itemPath[dirnameLen-1] != '/'){
+            itemPath[dirnameLen] = '/';
             dirnameLen++;
         }
         strncat(itemPath,dirp->d_name,PATH_MAX);
-        (outputItems[dirIndex]).name=strndup(dirp->d_name,256);
-        (outputItems[dirIndex]).path=strndup(itemPath,PATH_MAX);
+        (outputItems[dirIndex]).name = strndup(dirp->d_name,256);
+        (outputItems[dirIndex]).path = strndup(itemPath,PATH_MAX);
     
         struct stat fileStat;
-        if(lstat(outputItems[dirIndex].path,&fileStat)==-1){
+        if(lstat(outputItems[dirIndex].path,&fileStat) == -1){
             fprintf(stderr,"Error: lstat(%s) failed: %s\n",outputItems[dirIndex].path,strerror(errno));
-            outputItems[dirIndex].lstatSuccessful=false;
+            outputItems[dirIndex].lstatSuccessful = false;
             // dirIndex++;
             // continue;
         }
         else {
-            outputItems[dirIndex].lstatSuccessful=true;
+            outputItems[dirIndex].lstatSuccessful = true;
         }
-        if(S_ISDIR(fileStat.st_mode)==1){
-            outputItems[dirIndex].isDir=true;
+        if(S_ISDIR(fileStat.st_mode) == 1){
+            outputItems[dirIndex].isDir = true;
         }
+        keepMax(folder->widths.nameWidth,strnlen(outputItems[dirIndex].name,256));
         //getLinkInfo is called twice because sometimes S_ISLNK thinks something like .gitignore is a link
         getLinkInfo(&outputItems[dirIndex],fileStat,false);
 
@@ -312,13 +319,13 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
 void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** const dirs, folderInfo* folders){
     struct dirent* dirp;
     DIR* dp;
-    *printDirCount=argDirCount;
+    *printDirCount = argDirCount;
     //main loop. ls for one directory at a time
-    for(int i=0;i<argDirCount;i++){       
+    for(int i = 0;i<argDirCount;i++){       
         //get number of items in the directory. We need this number so that we know how much space to alloc
         //for the struct. Accounts for all items, even ones we don't print
-        size_t totalItemsInDir=0;
-        dp=opendir(dirs[i]);
+        size_t totalItemsInDir = 0;
+        dp = opendir(dirs[i]);
         if(!dp){
             //we cannot open this directory, so move on to the next one.   
             fprintf(stderr,"ls: cannot access '%s': %s",dirs[i],strerror(errno));
@@ -327,39 +334,40 @@ void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** con
             }
             (*printDirCount)--;
             //If we cannot access the directory, we cannot print it
-            folders[i].doWePrint=false;
+            folders[i].doWePrint = false;
             continue;
         }
         else{
             //count number of items in the directory
-            while((dirp=readdir(dp))!=NULL){
+            while((dirp = readdir(dp)) != NULL){
                 totalItemsInDir++;
             }
         }
          //if we pass more than one directory, list the path above the contents of that directory
-        if(dp!=NULL && argDirCount>1){      
-            folders[i].hasHeader=true;
+        if(dp != NULL && argDirCount>1){      
+            folders[i].hasHeader = true;
             //set the header equal to the dir path
-            folders[i].header=strndup(dirs[i],PATH_MAX);
+            folders[i].header = strndup(dirs[i],PATH_MAX);
         }
         else{
             //valid folder, but just one, so don't list the path
-            folders[i].hasHeader=false;
+            folders[i].hasHeader = false;
         }
         closedir(dp);
 
         //allocate space for info for each item in dir
-        folders[i].items=(itemInDir*)malloc(totalItemsInDir*sizeof(itemInDir));
-        folders[i].itemCount=whichItems(dirs[i],flags,folders[i].items,&folders[i]);
+        folders[i].items = (itemInDir*)malloc(totalItemsInDir*sizeof(itemInDir));
+        // folders[i].widths = calloc(sizeof(widthInfo),1);
+        folders[i].itemCount = whichItems(dirs[i],flags,folders[i].items,&folders[i]);
 
-        folders[i].doWePrint=true;
+        folders[i].doWePrint = true;
     }
 
 }
 
 void trimTime(char* timeString, char* outputString){
-    for(int i=4;i<16;i++){
-        outputString[i-4]=timeString[i];
+    for(int i = 4;i<16;i++){
+        outputString[i-4] = timeString[i];
     }
 }
 
@@ -386,8 +394,8 @@ void sortOutput(folderInfo* folders, char* const flags){
 */
 void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char* flags){
     //we only care about the folders we can actually print
-    folderInfo* printableFolders=malloc(printDirCount*sizeof(folderInfo));
-    for(int i=0,j=0;i<argDirCount;i++){
+    folderInfo* printableFolders = malloc(printDirCount*sizeof(folderInfo));
+    for(int i = 0, j = 0;i<argDirCount;i++){
         //copy over folders we need to print, skipping ones we don't
         if(folders[i].doWePrint){
             memcpy(&printableFolders[j],&folders[i],sizeof(folderInfo));
@@ -395,9 +403,9 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         }
     }
 
-    char* hasl=strchr(flags,'l');
-    int startIndex=0;
-    int step=1;
+    char* hasl = strchr(flags,'l');
+    int startIndex = 0;
+    int step = 1;
 
     //if no f flag, sort output
     //if f flag is present, do not sort output
@@ -411,54 +419,42 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
     printf("Rows: %d, cols: %d\n",w.ws_row,w.ws_col);
 
     //print the structs
-    for(int i=0;i<printDirCount;i++){
-        int numItems=printableFolders[i].itemCount;
+    for(int i = 0;i<printDirCount;i++){
+        int numItems = printableFolders[i].itemCount;
         //if we print more than one dir, we want the path listed above the contents
         if(printableFolders[i].hasHeader){
             //since newlines between dirs are structured as \n,header\n,contents\n, we don't print a newline at the start
             //since that would create an extra newline at the top of the printed dirs
-            if(i!=0){
+            if(i != 0){
                 printf("\n");
             }
             printf("%s:\n",printableFolders[i].header);
         }
         //go in reverse if -r flag is specified
         if(strchr(flags,'r')){
-            startIndex=numItems-1;
-            step=-1;
+            startIndex = numItems-1;
+            step = -1;
         }
 
         //print each item in each printable folder, colorzing directories as blue
         if(hasl){
             printf("total %ld\n",printableFolders[i].totalBlocks);
             //get max widths
-            int hardLinksMaxWidth=0, hardLinksWidth[numItems];
-            int sizeMaxWidth=1, sizeWidth[numItems];
-            int ownerMaxWidth=0, ownerWidth[numItems];
-            int groupMaxWidth=0, groupWidth[numItems];
+            int hardLinksWidth[numItems];
+            int sizeWidth[numItems];
+            int ownerWidth[numItems];
+            int groupWidth[numItems];
 
-            for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
-                hardLinksWidth[j]=countDigits(printableFolders[i].items[j].hardLinksCount);
-                if(hardLinksWidth[j]>hardLinksMaxWidth){
-                    hardLinksMaxWidth=hardLinksWidth[j];
-                }
-                sizeWidth[j]=countDigits(printableFolders[i].items[j].size);
-                if(sizeWidth[j]>sizeMaxWidth){
-                    sizeMaxWidth=sizeWidth[j];
-                }
-                ownerWidth[j]=strnlen(printableFolders[i].items[j].owner,256);
-                if(ownerWidth[j]>ownerMaxWidth){
-                    ownerMaxWidth=ownerWidth[j];
-                }
-                groupWidth[j]=strnlen(printableFolders[i].items[j].group,256);
-                if(groupWidth[j]>groupMaxWidth){
-                    groupMaxWidth=groupWidth[j];
-                }
+            for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
+                hardLinksWidth[j] = countDigits(printableFolders[i].items[j].hardLinksCount);
+                sizeWidth[j] = countDigits(printableFolders[i].items[j].size);
+                ownerWidth[j] = strnlen(printableFolders[i].items[j].owner,256);
+                groupWidth[j] = strnlen(printableFolders[i].items[j].group,256);
             }
             //print
-            for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
-                char* timeString=calloc(13,sizeof(char));
-                if(printableFolders[i].items[j].lstatSuccessful==false){
+            for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
+                char* timeString = calloc(13,sizeof(char));
+                if(printableFolders[i].items[j].lstatSuccessful == false){
                     strncpy(timeString,"           ?",13);
                 }
                 else{
@@ -468,7 +464,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                 //permissions
                 printf("%s ",printableFolders[i].items[j].permissions);
                 //hard links count
-                for(int k=0;k<hardLinksMaxWidth-hardLinksWidth[j];k++){
+                for(int k = 0;k<printableFolders[i].widths.hardLinksWidth-hardLinksWidth[j];k++){
                     putchar(' ');
                 }
                 if(printableFolders[i].items[j].hardLinksCount<0)
@@ -478,21 +474,21 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
 
                 //owner
                 printf("%s ",printableFolders[i].items[j].owner);
-                for(int k=0;k<ownerMaxWidth-ownerWidth[j];k++){
+                for(int k = 0;k<printableFolders[i].widths.ownerWidth-ownerWidth[j];k++){
                     putchar(' ');
                 }
 
                 //group
                 printf("%s ",printableFolders[i].items[j].group);
-                for(int k=0;k<groupMaxWidth-groupWidth[j];k++){
+                for(int k = 0;k<printableFolders[i].widths.groupWidth-groupWidth[j];k++){
                     putchar(' ');
                 }
 
                 //size
-                for(int k=0;k<sizeMaxWidth-sizeWidth[j];k++){
+                for(int k = 0;k<printableFolders[i].widths.sizeWidth-sizeWidth[j];k++){
                     putchar(' ');
                 }
-                if(printableFolders[i].items[j].size==SENTINEL)
+                if(printableFolders[i].items[j].size == SENTINEL)
                     printf("? ");
                 else
                     printf("%ld ", printableFolders[i].items[j].size);
@@ -502,13 +498,13 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
 
                 //name
                 //if dir
-                if(printableFolders[i].items[j].isDir==true){
+                if(printableFolders[i].items[j].isDir == true){
                     printf("%s%s%s",BLUE,printableFolders[i].items[j].name,DEFAULT);
                 }
                 //if link
-                else if(printableFolders[i].items[j].isLink==true){
+                else if(printableFolders[i].items[j].isLink == true){
                     printf("%s%s%s -> ",CYAN,printableFolders[i].items[j].name,DEFAULT);
-                    if(printableFolders[i].items[j].pointsToDir==true){
+                    if(printableFolders[i].items[j].pointsToDir == true){
                         printf("%s%s%s",BLUE,printableFolders[i].items[j].link,DEFAULT);
                     }
                     else{
@@ -521,10 +517,10 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
                     printf("%s",printableFolders[i].items[j].name);
                 }
                 
-                if(step==-1 && j>0){
+                if(step == -1 && j>0){
                     printf("\n");
                 }
-                else if(step==1 && j<numItems-1){
+                else if(step == 1 && j<numItems-1){
                     printf("\n");
                 }
 
@@ -540,15 +536,15 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         }
         //don't use long listing format
         else {
-            for(int j=startIndex;step==-1 ? j>=0 : j<numItems;j+=step){
-                if(printableFolders[i].items[j].isDir==true){
+            for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
+                if(printableFolders[i].items[j].isDir == true){
                     printf("%s%s%s  ",BLUE, printableFolders[i].items[j].name, DEFAULT);
                 }
                 //check for link first because the "default" print case should be last
-                else if(printableFolders[i].items[j].isLink==true){
+                else if(printableFolders[i].items[j].isLink == true){
                     printf("%s%s%s  ",CYAN, printableFolders[i].items[j].name, DEFAULT);
                 }
-                else if(printableFolders[i].items[j].isDir==false){
+                else if(printableFolders[i].items[j].isDir == false){
                     printf("%s  ",printableFolders[i].items[j].name);
                 }
                 free(printableFolders[i].items[j].name);
@@ -565,7 +561,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
     }
 
     //Cleanup
-    for(int i=0;i<argDirCount;i++){
+    for(int i = 0;i<argDirCount;i++){
         if(folders[i].hasHeader){
             free(folders[i].header);
         }
@@ -575,42 +571,42 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
 }
 
 int main(int argc, char* argv[]){
-    // char** sortedArgs=malloc(argc*sizeof(char*));
+    // char** sortedArgs = malloc(argc*sizeof(char*));
     // memcpy(sortedArgs,argv,argc*sizeof(char*));
     // qsort(&sortedArgs[1],argc-1,sizeof(char*),&argSortComp);
 
-    char** args=malloc(argc*sizeof(char*));
+    char** args = malloc(argc*sizeof(char*));
     memcpy(args,argv,argc*sizeof(char*));
-    // for(int i=1;i<argc;i++){
+    // for(int i = 1;i<argc;i++){
         // printf("%s\n",args[i]);
-    char flags[1024]={'0'};
-    char** directories=malloc(argc*sizeof(char*));
+    char flags[1024] = {'0'};
+    char** directories = malloc(argc*sizeof(char*));
 
-    size_t flagCount=0;
-    size_t argDirCount=0;       //number of directories passed in through argv
-    size_t printDirCount=0;     //number of directories that we can actually print
+    size_t flagCount = 0;
+    size_t argDirCount = 0;       //number of directories passed in through argv
+    size_t printDirCount = 0;     //number of directories that we can actually print
     getFlagsAndDirs(argc,args,flags,directories,&flagCount,&argDirCount);
 
-    bool needToFree=true;
+    bool needToFree = true;
     //run ls on the current dirctory if we don't provide any directory arguments
     if(argDirCount<1){
-        directories[0]=".";
-        needToFree=false;
-        argDirCount=1;
+        directories[0] = ".";
+        needToFree = false;
+        argDirCount = 1;
     }
     //allocate space in case we need to print all the directories.
-    folderInfo* folders=malloc(argDirCount*sizeof(folderInfo));
+    folderInfo* folders = malloc(argDirCount*sizeof(folderInfo));
     ls(flags,argDirCount,&printDirCount,directories,folders);
     // printf("gsd %d\n",printDirCount);
     printLS(argDirCount,printDirCount,folders,flags);
     free(folders);
     // printf("\nFlag count: %ld\nDir count: %ld\n",flagCount,argDirCount);
     // puts("Flags:");
-    for(int i=0;i<flagCount;i++){
+    for(int i = 0;i<flagCount;i++){
         // printf("%c\n",flags[i]);
     }
     // puts("\nDirs:");
-    for(int i=0;i<argDirCount;i++){
+    for(int i = 0;i<argDirCount;i++){
         // printf("%s\n",directories[i]);
     }
     // free(sortedArgs);
@@ -618,7 +614,7 @@ int main(int argc, char* argv[]){
     //cleanup (kinda)
     free(args);
     if(needToFree){
-        for(int i=0;i<argDirCount;i++){
+        for(int i = 0;i<argDirCount;i++){
             free(directories[i]);
         }
     }
