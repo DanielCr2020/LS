@@ -56,6 +56,12 @@ typedef struct folderInfo {
     widthInfo widths;     //width information for each directory
 } folderInfo;           //one folder read by ls
 
+//struct with string and length of that string
+typedef struct nameAndLen {
+    char* name;
+    int len;
+} nameAndLen;
+
 int argSortComp(const void* argA, const void* argB);
 
 int countDigits(int num);
