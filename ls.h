@@ -19,7 +19,7 @@ typedef struct widthInfo {
     int groupWidth;
     int sizeWidth;
     //int timeWidth;
-    int nameWidth;
+    // int nameWidth;
 } widthInfo;
 
 //these will be populated with information from ls(), and then sorted and printed
@@ -56,6 +56,10 @@ typedef struct folderInfo {
     widthInfo widths;     //width information for each directory
 } folderInfo;           //one folder read by ls
 
+// typedef struct printConfigTable {
+
+// } printConfigTable;
+
 //struct with string and length of that string
 typedef struct nameAndLen {
     char* name;
@@ -79,3 +83,5 @@ void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** con
 void trimTime(char* timeString, char* outputString);
 
 void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char* flags);
+
+void longFormatPrint(folderInfo* printableFolders, int startIndex, int step, int numItems, int i);

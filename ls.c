@@ -211,7 +211,6 @@ void getLongListInfo(itemInDir* item, folderInfo* folder){
         item->size = fileStat.st_size;
         item->mtime = fileStat.st_mtime;
 
-        // folder->widths.ownerWidth = max(strnlen(item->owner,256),folder->widths.ownerWidth);
         keepMax(folder->widths.ownerWidth,strnlen(item->owner,256));
         keepMax(folder->widths.groupWidth,strnlen(item->group,256));
         keepMax(folder->widths.sizeWidth,countDigits(item->size));
@@ -292,7 +291,6 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
         if(S_ISDIR(fileStat.st_mode) == 1){
             outputItems[dirIndex].isDir = true;
         }
-        keepMax(folder->widths.nameWidth,strnlen(outputItems[dirIndex].name,256));
         //getLinkInfo is called twice because sometimes S_ISLNK thinks something like .gitignore is a link
         getLinkInfo(&outputItems[dirIndex],fileStat,false);
 
@@ -390,6 +388,94 @@ int sortNames(const void* name1, const void* name2){
     return ((nameAndLen*) name1)->len < ((nameAndLen*) name2)->len;
 }
 
+//table printing
+void createPrintConfig(folderInfo* printableFolders, int numItems){
+    //handling terminal width
+    struct winsize w;
+    ioctl(STDOUT_FILENO,TIOCGWINSZ,&w);
+    int rows = w.ws_row;
+    int cols = w.ws_col;
+    // printf("Rows: %d, cols: %d\n",rows,cols);
+
+    int minColumnWidth = 3; //1 char + 2 spaces
+    int maxItemsPerRow = rows / minColumnWidth;
+
+
+}
+
+/**
+ * @brief called when -l flag is specified. Print using long list format
+ * @param printableFolders: folderInfo structs that we actually print
+ * @param startIndex: for for loop, used for if -r flag is specified
+ * @param step: 1 or -1 depending on if printing order is reversed (-r)
+ * @param i: index into which of the printable folders we are printing
+ */
+void longFormatPrint(folderInfo* printableFolders, int startIndex, int step, int numItems, int i){
+    for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
+        char* timeString = calloc(13,sizeof(char));
+        if(printableFolders[i].items[j].lstatSuccessful == false){
+            strncpy(timeString,"           ?",13);
+        }
+        else{
+            trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
+        }
+
+        //permissions
+        printf("%s ",printableFolders[i].items[j].permissions);
+        //hard links count
+        if(printableFolders[i].items[j].hardLinksCount<0)
+            printf("? ");
+        else    
+            printf("%*d ", printableFolders[i].widths.hardLinksWidth,printableFolders[i].items[j].hardLinksCount);
+        //owner
+        printf("%*s ",printableFolders[i].widths.ownerWidth,printableFolders[i].items[j].owner);
+        //group
+        printf("%*s ",printableFolders[i].widths.groupWidth, printableFolders[i].items[j].group);
+        //size
+        if(printableFolders[i].items[j].size == SENTINEL)
+            printf("? ");
+        else
+            printf("%*ld ", printableFolders[i].widths.sizeWidth,printableFolders[i].items[j].size);
+        //time
+        printf("%s ", timeString);
+        //name
+        //if dir
+        if(printableFolders[i].items[j].isDir == true){
+            printf("%s%s%s",BLUE,printableFolders[i].items[j].name,DEFAULT);
+        }
+        //if link
+        else if(printableFolders[i].items[j].isLink == true){
+            printf("%s%s%s -> ",CYAN,printableFolders[i].items[j].name,DEFAULT);
+            if(printableFolders[i].items[j].pointsToDir == true){
+                printf("%s%s%s",BLUE,printableFolders[i].items[j].link,DEFAULT);
+            }
+            else{
+                printf("%s",printableFolders[i].items[j].link);
+            }
+        }
+        //if neither dir nor link, print default
+        else {
+            printf("%s",printableFolders[i].items[j].name);
+        }
+        
+        if(step == -1 && j>0){
+            printf("\n");
+        }
+        else if(step == 1 && j<numItems-1){
+            printf("\n");
+        }
+
+        //cleanup
+        if(printableFolders[i].items[j].isLink){
+            free(printableFolders[i].items[j].link);
+        }
+        free(printableFolders[i].items[j].name);
+        free(printableFolders[i].items[j].path);
+        free(printableFolders[i].items[j].permissions);
+        free(timeString);
+    }
+}
+
 /**
  * @brief Using the structs we populated earlier, print the information to the screen, coloring directories as blue.
  * @param argDirCount: Number of directories passed in through argv
@@ -418,16 +504,6 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         sortOutput(folders, flags);
     }
 
-    //handling terminal width
-    struct winsize w;
-    ioctl(STDOUT_FILENO,TIOCGWINSZ,&w);
-    int rows = w.ws_row;
-    int cols = w.ws_col;
-    // printf("Rows: %d, cols: %d\n",rows,cols);
-
-    int minColumnWidth = 3; //1 char + 2 spaces
-    int maxItemsPerRow = rows / minColumnWidth;
-
     //print the structs
     for(int i = 0;i<printDirCount;i++){
         int numItems = printableFolders[i].itemCount;
@@ -445,8 +521,6 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         // for(int j=0;j<numItems;j++){
         //     printf("%s, %d\n",names[j].name,names[j].len);
         // }
-
-
 
         //if we print more than one dir, we want the path listed above the contents
         if(printableFolders[i].hasHeader){
@@ -466,73 +540,9 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         //print each item in each printable folder, colorzing directories as blue
         if(hasl){
             printf("total %ld\n",printableFolders[i].totalBlocks);
-            //print
-            for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
-                char* timeString = calloc(13,sizeof(char));
-                if(printableFolders[i].items[j].lstatSuccessful == false){
-                    strncpy(timeString,"           ?",13);
-                }
-                else{
-                    trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
-                }
-
-                //permissions
-                printf("%s ",printableFolders[i].items[j].permissions);
-                //hard links count
-                if(printableFolders[i].items[j].hardLinksCount<0)
-                    printf("? ");
-                else    
-                    printf("%*d ", printableFolders[i].widths.hardLinksWidth,printableFolders[i].items[j].hardLinksCount);
-                //owner
-                printf("%*s ",printableFolders[i].widths.ownerWidth,printableFolders[i].items[j].owner);
-                //group
-                printf("%*s ",printableFolders[i].widths.groupWidth, printableFolders[i].items[j].group);
-                //size
-                if(printableFolders[i].items[j].size == SENTINEL)
-                    printf("? ");
-                else
-                    printf("%*ld ", printableFolders[i].widths.sizeWidth,printableFolders[i].items[j].size);
-                //time
-                printf("%s ", timeString);
-                //name
-                //if dir
-                if(printableFolders[i].items[j].isDir == true){
-                    printf("%s%s%s",BLUE,printableFolders[i].items[j].name,DEFAULT);
-                }
-                //if link
-                else if(printableFolders[i].items[j].isLink == true){
-                    printf("%s%s%s -> ",CYAN,printableFolders[i].items[j].name,DEFAULT);
-                    if(printableFolders[i].items[j].pointsToDir == true){
-                        printf("%s%s%s",BLUE,printableFolders[i].items[j].link,DEFAULT);
-                    }
-                    else{
-                        printf("%s",printableFolders[i].items[j].link);
-                    }
-                        //,printableFolders[i].items[j].link);
-                }
-                //if neither dir nor link, print default
-                else {
-                    printf("%s",printableFolders[i].items[j].name);
-                }
-                
-                if(step == -1 && j>0){
-                    printf("\n");
-                }
-                else if(step == 1 && j<numItems-1){
-                    printf("\n");
-                }
-
-                //cleanup
-                if(printableFolders[i].items[j].isLink){
-                    free(printableFolders[i].items[j].link);
-                }
-                free(printableFolders[i].items[j].name);
-                free(printableFolders[i].items[j].path);
-                free(printableFolders[i].items[j].permissions);
-                free(timeString);
-            }
+            longFormatPrint(printableFolders,startIndex,step,numItems,i);
         }
-        //don't use long listing format
+        //if not using long listing format
         else {
             for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
                 if(printableFolders[i].items[j].isDir == true){
