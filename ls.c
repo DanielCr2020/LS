@@ -417,14 +417,14 @@ void createPrintConfig(itemInDir* items, int numItems){
     int usedLength = 0;
     int minimumRows = 0;
     for(int i=0;i<numItems-1;i++){
-        printf("Lengths: %s: %d\n",items2[i].name,items2[i].nameLength); 
+        // printf("Lengths: %s: %d\n",items2[i].name,items2[i].nameLength); 
         usedLength += items2[i].nameLength + 2;
         if(usedLength + items2[i+1].nameLength > cols){
             break;
         }
         minimumRows++;
     }
-    printf("%d %d\n",usedLength,minimumRows);
+    // printf("%d %d\n",usedLength,minimumRows);
     
 
 }
