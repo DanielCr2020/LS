@@ -28,6 +28,7 @@ typedef struct widthInfo {
 typedef struct itemInDir {
     char* name;     //name of the file itself
     char* path;     //path to file - used for stat()
+    int nameLength; //length of file name
     bool isDir;     //Used for colorization
 
     char* fileType; //?

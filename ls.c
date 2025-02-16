@@ -388,18 +388,44 @@ int sortNames(const void* name1, const void* name2){
     return ((nameAndLen*) name1)->len < ((nameAndLen*) name2)->len;
 }
 
+int sortLengths(const void* item1, const void* item2){
+    return ((itemInDir*) item1)->nameLength < ((itemInDir*) item2)->nameLength;
+}
+
 //table printing
-void createPrintConfig(folderInfo* printableFolders, int numItems){
+void createPrintConfig(itemInDir* items, int numItems){
     //handling terminal width
     struct winsize w;
     ioctl(STDOUT_FILENO,TIOCGWINSZ,&w);
     int rows = w.ws_row;
-    int cols = w.ws_col;
+    int cols = w.ws_col;        //usable width
     // printf("Rows: %d, cols: %d\n",rows,cols);
 
     int minColumnWidth = 3; //1 char + 2 spaces
-    int maxItemsPerRow = rows / minColumnWidth;
+    // int maxItemsPerRow = rows / minColumnWidth;
 
+
+
+    for(int i = 0;i<numItems;i++){
+        items[i].nameLength = strnlen(items[i].name,256);
+    }
+    itemInDir* items2 = malloc(sizeof(itemInDir)*numItems);
+    memcpy(items2,items,sizeof(itemInDir)*numItems);
+    qsort(items2,numItems,sizeof(itemInDir),sortLengths);
+
+    //find starting table configuration
+    int usedLength = 0;
+    int minimumRows = 0;
+    for(int i=0;i<numItems-1;i++){
+        printf("Lengths: %s: %d\n",items2[i].name,items2[i].nameLength); 
+        usedLength += items2[i].nameLength + 2;
+        if(usedLength + items2[i+1].nameLength > cols){
+            break;
+        }
+        minimumRows++;
+    }
+    printf("%d %d\n",usedLength,minimumRows);
+    
 
 }
 
@@ -433,7 +459,7 @@ void longFormatPrint(folderInfo* printableFolders, int startIndex, int step, int
         printf("%*s ",printableFolders[i].widths.groupWidth, printableFolders[i].items[j].group);
         //size
         if(printableFolders[i].items[j].size == SENTINEL)
-            printf("? ");
+            printf("%*s ", printableFolders[i].widths.sizeWidth,"?");
         else
             printf("%*ld ", printableFolders[i].widths.sizeWidth,printableFolders[i].items[j].size);
         //time
@@ -544,7 +570,9 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         }
         //if not using long listing format
         else {
+            createPrintConfig(printableFolders[i].items,numItems);
             for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
+                // printf("")
                 if(printableFolders[i].items[j].isDir == true){
                     printf("%s%s%s  ",BLUE, printableFolders[i].items[j].name, DEFAULT);
                 }
