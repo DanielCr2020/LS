@@ -31,6 +31,8 @@ typedef struct itemInDir {
     int nameLength; //length of file name
     bool isDir;     //Used for colorization
 
+    struct stat fileStat;   //stat information for each file in a directory
+
     char* fileType; //?
     char* permissions;  //permissions of the file
     int hardLinksCount;
@@ -45,17 +47,17 @@ typedef struct itemInDir {
 
 } itemInDir;        //each item in a directory
 
-//information about one folder we are reading
-typedef struct folderInfo {
-    bool hasHeader;     //If printing the directory path above the contents
-    char* header;       //If we are, what is it?
-    //char* folderPath; //Absolute path to the folder
+//information about one ls target we are reading
+typedef struct lsTargetInfo {
+    bool showPath;     //If printing the directory path above the contents
+    char* path;         //Absolute path to the folder
     itemInDir* items;   //array of item info structures for that directory
     int itemCount;      //number of items in directory
     bool doWePrint;     //do we print the contents of this folder?
     size_t totalBlocks;   //for -l, shows sum of size of all the items in the directory
     widthInfo widths;     //width information for each directory
-} folderInfo;           //one folder read by ls
+    struct stat fileStat;   //stat information for this directory
+} lsTargetInfo;           //one folder read by ls
 
 // typedef struct printConfigTable {
 
@@ -75,14 +77,14 @@ void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char**
 
 void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall);
 
-void getLongListInfo(itemInDir* item, folderInfo* folder, char* flags);
+void getLongListInfo(itemInDir* item, lsTargetInfo* folder, char* flags);
 
-int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folderInfo* folder);
+int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsTargetInfo* folder);
 
-void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** const dirs, folderInfo* folders);
+void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** const dirs, lsTargetInfo* folders);
 
 void trimTime(char* timeString, char* outputString);
 
-void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char* flags);
+void printLS(size_t argDirCount, size_t printDirCount, lsTargetInfo* folders, char* flags);
 
-void longFormatPrint(folderInfo* printableFolders, int startIndex, int step, int numItems, int i);
+void longFormatPrint(lsTargetInfo* printableFolders, int startIndex, int step, int numItems, int i);
