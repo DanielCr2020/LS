@@ -23,6 +23,7 @@
     -f: Output is not sorted.
     -n:  The same as −l, except that the owner and group IDs are displayed numerically rather than 
     converting to a owner or group name.
+    -S: Sort by size, largest file first.
 
     Flags to do:
     -c: Use time when file status was last changed, instead of time of last modification of the file for 
@@ -32,7 +33,6 @@ list are not indirected through.
     -F: Display a slash ( ‘/’ ) immediately after each pathname that is a directory, an asterisk ( ‘∗’ ) after
 each that is executable, an at sign ( ‘@’ ) after each symbolic link, a percent sign ( ‘%’ ) after each
 whiteout, an equal sign ( ‘=’ ) after each socket, and a vertical bar ( ‘|’ ) after each that is a FIFO
-
     -h: Modifies the −s and −l options, causing the sizes to be reported in bytes displayed in a human
 readable format. Overrides −k.
     -i: For each file, print the file’s file serial number (inode number).
@@ -41,7 +41,6 @@ readable format. Overrides −k.
     -q: Force printing of non-printable characters in file names as the character ‘?’; this is the default when
 output is to a terminal.
     -R: Recursively list subdirectories encountered
-    -S: Sort by size, largest file first.
     -s: Display the number of file system blocks actually used by each file, in units of 512 bytes or
 BLOCKSIZE (see ENVIRONMENT) where partial units are rounded up to the next integer value.
 If the output is to a terminal, a total sum for all the file sizes is output on a line before the listing.
@@ -381,6 +380,10 @@ int sortByName(const void* name1, const void* name2){
     return strcmp( ((itemInDir*) name1)->name,((itemInDir*) name2)->name);
 }
 
+int sortBySize(const void* item1, const void* item2){
+    return ((itemInDir*) item1)->size < ((itemInDir*) item2)->size;
+}
+
 /**
  * @brief Using the folder structs and the flags, sort the folder structs according to the flags
  * @param folders: folderInfo structs to be sorted
@@ -533,15 +536,20 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
     int startIndex = 0;
     int step = 1;
 
-    //if no f flag, sort output
+    //if no f flag, sort output (by name)
     //if f flag is present, do not sort output
     if(!strchr(flags,'f')){
         sortOutput(folders, flags);
     }
 
+
+
     //print the structs
     for(int i = 0;i<printDirCount;i++){
         int numItems = printableFolders[i].itemCount;
+        if(strchr(flags,'S')){
+            qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortBySize);
+        }
         // printf("\nItems in folder: %d\n",numItems);
 
         //set up for formatted printing
