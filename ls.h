@@ -75,7 +75,7 @@ void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char**
 
 void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall);
 
-void getLongListInfo(itemInDir* item, folderInfo* folder);
+void getLongListInfo(itemInDir* item, folderInfo* folder, char* flags);
 
 int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folderInfo* folder);
 

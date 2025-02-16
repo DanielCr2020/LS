@@ -21,6 +21,8 @@
     -l
     -r
     -f: Output is not sorted.
+    -n:  The same as −l, except that the owner and group IDs are displayed numerically rather than 
+    converting to a owner or group name.
 
     Flags to do:
     -c: Use time when file status was last changed, instead of time of last modification of the file for 
@@ -36,8 +38,6 @@ readable format. Overrides −k.
     -i: For each file, print the file’s file serial number (inode number).
     -k: Modifies the −s option, causing the sizes to be reported in kilobytes. The rightmost of the −k and
 −h flags overrides the previous flag. See also −h
-    -n:  The same as −l, except that the owner and group IDs are displayed numerically rather than con-
-verting to a owner or group name.
     -q: Force printing of non-printable characters in file names as the character ‘?’; this is the default when
 output is to a terminal.
     -R: Recursively list subdirectories encountered
@@ -163,8 +163,9 @@ void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall){
  * @brief Get information (for one file) used in long list format printing
  * @param item: A pointer to the item information struct. Modified by function.
  * @param folder: A handle to the current folder, used for getting the total blocks taken up by the items in the folder
+ * @param flags: Used for -n, which specifies group and owner as numbers, not strings
  */
-void getLongListInfo(itemInDir* item, folderInfo* folder){
+void getLongListInfo(itemInDir* item, folderInfo* folder, char* flags){
     char permissions[] = "----------";
     if(item->isDir == true){
         permissions[0] = 'd';
@@ -206,8 +207,14 @@ void getLongListInfo(itemInDir* item, folderInfo* folder){
     grp = getgrgid(fileStat.st_gid);
 
     if(item->lstatSuccessful == true){
-        item->owner = pwd->pw_name;
-        item->group = grp->gr_name;
+        char* owner = pwd->pw_name;
+        char* group = grp->gr_name;
+        if(strchr(flags,'n')){
+            sprintf(owner,"%d",pwd->pw_uid);
+            sprintf(group,"%d",grp->gr_gid);
+        }
+        item->owner = owner;
+        item->group = group;
         item->size = fileStat.st_size;
         item->mtime = fileStat.st_mtime;
 
@@ -243,26 +250,27 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
         return 0;
     }
     int dirIndex = 0;
-    char* hasl = "\0";
-    hasl = strchr(flags,'l');
+    char* has_l = "\0";
+    has_l = strchr(flags,'l');
+    char* has_n = strchr(flags,'n');
     //these cause valgrind errors. Will fix later
-    char* hasa = "\0";
-    hasa = strchr(flags,'a');
-    char* hasA = "\0";
-    hasA = strchr(flags,'A');
+    char* has_a = "\0";
+    has_a = strchr(flags,'a');
+    char* has_A = "\0";
+    has_A = strchr(flags,'A');
     while((dirp = readdir(dp)) != NULL){
         //sets these to false so they are not set true by garbage values
         outputItems[dirIndex].isDir = false;
         outputItems[dirIndex].isLink = false;
         //strchr(flags,'a') == NULL   -> 'a' is not a given flag
 
-        if(!hasa && !hasA){
+        if(!has_a && !has_A){
             //skip entries that start with .
             if(dirp->d_name[0] == '.'){
                 continue;
             }
         }
-        if(hasA && hasA>hasa){
+        if(has_A && has_A>has_a){
             if(strcmp(dirp->d_name,".") == 0 || strcmp(dirp->d_name,"..") == 0){
                 continue;
             }
@@ -295,8 +303,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, folde
         getLinkInfo(&outputItems[dirIndex],fileStat,false);
 
         // printf("is link?: %d\n",S_ISLNK(fileStat.st_mode));
-        if(hasl){
-            getLongListInfo(&outputItems[dirIndex],folder);
+        if(has_l || has_n){
+            getLongListInfo(&outputItems[dirIndex],folder,flags);
         }
         dirIndex++;
     }
@@ -520,7 +528,8 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         }
     }
 
-    char* hasl = strchr(flags,'l');
+    char* has_l = strchr(flags,'l');
+    char* has_n = strchr(flags,'n');
     int startIndex = 0;
     int step = 1;
 
@@ -564,7 +573,7 @@ void printLS(size_t argDirCount, size_t printDirCount, folderInfo* folders, char
         }
 
         //print each item in each printable folder, colorzing directories as blue
-        if(hasl){
+        if(has_l || has_n){
             printf("total %ld\n",printableFolders[i].totalBlocks);
             longFormatPrint(printableFolders,startIndex,step,numItems,i);
         }
