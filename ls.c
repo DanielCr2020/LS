@@ -80,28 +80,28 @@ int countDigits(int num){
 /**
     * @brief Takes in argc and argv, and a bunch of buffers. Sets those buffers to be flags, dirs, and count of each
     * @param argc: number of arguments passed via command line
-    * @param inputArgs: argv, copied by value
+    * @param argv: argv
     * @param outputFlags: A string where each index is a flag passed in through argv
     * @param outputTargets: A 2D array for every command line argument that is not a flag. Everything we want to actually list.
     * @param flagCount: The number of flags. Set by the function.
     * @param argTargetCount: The number of directories passed in through argv
 */
-void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char** outputTargets, size_t* flagCount, size_t* argTargetCount){
-    for(int i=0;i<argc;i++){    //loop over each arg in inputArgs
+void getFlagsAndDirs(int argc, char** const argv, char* outputFlags, char** outputTargets, int* flagCount, int* argTargetCount){
+    for(int i=0;i<argc;i++){    //loop over each arg in argv
         bool isFlag = false;
-        if(inputArgs[i][0] == '-'){
+        if(argv[i][0] == '-'){
             isFlag = true;
         }
         //loop over each character in a given argument
-        for(int j=0;j<strnlen(inputArgs[i],1024);j++){
-            if(isFlag && inputArgs[i][j] != '-'){
-                (outputFlags[*flagCount]) = inputArgs[i][j];
+        for(int j=0;j<strnlen(argv[i],1024);j++){
+            if(isFlag && argv[i][j] != '-'){
+                (outputFlags[*flagCount]) = argv[i][j];
                 // printf("flag: %c\n",outputFlags[*flagCount]);
                 (*flagCount)++;
             }
         }
         if(isFlag == false && i>0){
-            (outputTargets[*argTargetCount]) = strndup(inputArgs[i],1024);
+            (outputTargets[*argTargetCount]) = strndup(argv[i],1024);
             // printf("dir: %s\n",outputTargets[*argTargetCount]);
             (*argTargetCount)++;
         }
@@ -322,7 +322,7 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsTar
  * @param folders: A (blank) array of structs that contains information we need for printing the contents of a folder. 
  *      Modified by function
 */
-void ls(char* const flags, size_t argTargetCount, size_t* printTargetCount, char** const lsTargets, lsTargetInfo* folders){
+void ls(char* const flags, int argTargetCount, int* printTargetCount, char** const lsTargets, lsTargetInfo* folders){
     struct dirent* dirp;
     DIR* dp;
     *printTargetCount = argTargetCount;
@@ -331,7 +331,7 @@ void ls(char* const flags, size_t argTargetCount, size_t* printTargetCount, char
         //get number of items in the directory. We need this number so that we know how much space to alloc
         //for the struct. Accounts for all items, even ones we don't print
         size_t totalItemsInDir = 0;
-        struct stat fileStat;
+        // struct stat fileStat;
         // char* itemPath = realpath(lsTargets[i],NULL);
         // if((lstat))
         dp = opendir(lsTargets[i]);
@@ -421,11 +421,11 @@ void createPrintConfig(itemInDir* items, int numItems){
     //handling terminal width
     struct winsize w;
     ioctl(STDOUT_FILENO,TIOCGWINSZ,&w);
-    int rows = w.ws_row;
+    // int rows = w.ws_row;
     int cols = w.ws_col;        //usable width
     // printf("Rows: %d, cols: %d\n",rows,cols);
 
-    int minColumnWidth = 3; //1 char + 2 spaces
+    // int minColumnWidth = 3; //1 char + 2 spaces
     // int maxItemsPerRow = rows / minColumnWidth;
 
 
@@ -478,9 +478,15 @@ void longFormatPrint(lsTargetInfo* printableFolders, int startIndex, int step, i
         else    
             printf("%*d ", printableFolders[i].widths.hardLinksWidth,printableFolders[i].items[j].hardLinksCount);
         //owner
-        printf("%*s ",printableFolders[i].widths.ownerWidth,printableFolders[i].items[j].owner);
+        if(strcmp(printableFolders[i].items[j].owner,"?")==0)
+            printf("?%*s ",printableFolders[i].widths.ownerWidth-1,"");
+        else
+            printf("%*s ",printableFolders[i].widths.ownerWidth,printableFolders[i].items[j].owner);
         //group
-        printf("%*s ",printableFolders[i].widths.groupWidth, printableFolders[i].items[j].group);
+        if(strcmp(printableFolders[i].items[j].group,"?")==0)
+            printf("?%*s ",printableFolders[i].widths.groupWidth-1,"");
+        else
+            printf("%*s ",printableFolders[i].widths.groupWidth,printableFolders[i].items[j].group);
         //size
         if(printableFolders[i].items[j].size == SENTINEL)
             printf("%*s ", printableFolders[i].widths.sizeWidth,"?");
@@ -533,7 +539,7 @@ void longFormatPrint(lsTargetInfo* printableFolders, int startIndex, int step, i
  * @param folders: The folder structs we filled in with ls() 
  * @param flags: The flags string. 
 */
-void printLS(size_t argTargetCount, size_t printTargetCount, lsTargetInfo* folders, char* flags){
+void printLS(int argTargetCount, int printTargetCount, lsTargetInfo* folders, char* flags){
     //we only care about the folders we can actually print
     lsTargetInfo* printableFolders = malloc(printTargetCount*sizeof(lsTargetInfo));
     for(int i=0, j=0;i<argTargetCount;i++){
@@ -641,61 +647,30 @@ int main(int argc, char* argv[]){
     // char** sortedArgs = malloc(argc*sizeof(char*));
     // memcpy(sortedArgs,argv,argc*sizeof(char*));
     // qsort(&sortedArgs[1],argc-1,sizeof(char*),&argSortComp);
-    char** args = malloc((argc+1)*sizeof(*args));
+    // char** args = malloc((argc+1)*sizeof(*args));
     char** lsTargets = malloc((argc+1)*sizeof(*lsTargets));
-    for(int i=0;i<argc;i++){
-        size_t length = strlen(argv[i])+1;
-        args[i] = malloc(length);
-        lsTargets[i] = malloc(length);      //memory leaks :(
-        memcpy(args[i],argv[i],length);
-        memcpy(lsTargets[i],argv[i],length);
-    }
-    args[argc] = NULL;
-    lsTargets[argc] = NULL;
-    // memcpy(args,argv,totalChars);
-    // for(int i = 1;i<argc;i++){
-        // printf("%s\n",args[i]);
+
     char flags[1024] = {'0'};
 
-    size_t flagCount = 0;
-    size_t argTargetCount = 0;       //number of lsTargets passed in through argv
-    size_t printTargetCount = 0;     //number of lsTargets that we can actually print
-    getFlagsAndDirs(argc,args,flags,lsTargets,&flagCount,&argTargetCount);
-
-    bool needToFree = true;
+    int flagCount = 0;
+    int argTargetCount = 0;       //number of lsTargets passed in through argv
+    int printTargetCount = 0;     //number of lsTargets that we can actually print
+    getFlagsAndDirs(argc,argv,flags,lsTargets,&flagCount,&argTargetCount);
     //run ls on the current dirctory if we don't provide any directory arguments
     if(argTargetCount<1){
+        lsTargets[0] = malloc(2); //"."
         memcpy(lsTargets[0],".",2);
-        needToFree = false;
         argTargetCount = 1;
     }
     //allocate space in case we need to print all the lsTargets.
     lsTargetInfo* folders = malloc(argTargetCount*sizeof(lsTargetInfo));
     ls(flags,argTargetCount,&printTargetCount,lsTargets,folders);
-    // printf("gsd %d\n",printTargetCount);
     printLS(argTargetCount,printTargetCount,folders,flags);
     free(folders);
-    // printf("\nFlag count: %ld\nDir count: %ld\n",flagCount,argTargetCount);
-    // puts("Flags:");
-    for(int i=0;i<flagCount;i++){
-        // printf("%c\n",flags[i]);
-    }
-    // puts("\nDirs:");
-    for(int i=0;i<argTargetCount;i++){
-        // printf("%s\n",lsTargets[i]);
-    }
-    // free(sortedArgs);
 
     //cleanup (kinda)
-    free(args);
-    if(true || needToFree){
-        for(int i=0;i<argc+1;i++){
-            free(lsTargets[i]);
-            free(args[i]);
-        }
-    }
-    else{
-        free(lsTargets[0]);
+    for(int i=0;i<argc;i++){
+        free(lsTargets[i]);
     }
     free(lsTargets);
 }

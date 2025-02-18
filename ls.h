@@ -73,7 +73,7 @@ int argSortComp(const void* argA, const void* argB);
 
 int countDigits(int num);
 
-void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char** outputDirs, size_t* flagCount, size_t* argDirCount);
+void getFlagsAndDirs(int argc, char** const inputArgs, char* outputFlags, char** outputTargets, int* flagCount, int* argDirCount);
 
 void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall);
 
@@ -81,10 +81,10 @@ void getLongListInfo(itemInDir* item, lsTargetInfo* folder, char* flags);
 
 int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsTargetInfo* folder);
 
-void ls(char* const flags, size_t argDirCount, size_t* printDirCount, char** const dirs, lsTargetInfo* folders);
+void ls(char* const flags, int argDirCount, int* printDirCount, char** const dirs, lsTargetInfo* folders);
 
 void trimTime(char* timeString, char* outputString);
 
-void printLS(size_t argDirCount, size_t printDirCount, lsTargetInfo* folders, char* flags);
+void printLS(int argDirCount, int printDirCount, lsTargetInfo* folders, char* flags);
 
 void longFormatPrint(lsTargetInfo* printableFolders, int startIndex, int step, int numItems, int i);
