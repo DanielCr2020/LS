@@ -164,16 +164,14 @@ void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall){
  * @param folder: A handle to the current folder, used for getting the total blocks taken up by the items in the folder
  * @param flags: Used for -n, which specifies group and owner as numbers, not strings
  */
-void getLongListInfo(itemInDir* item, lsTargetInfo* folder, char* flags){
+void getLongListInfo(itemInDir* item, lsRequestedItem* folder, char* flags){
     char permissions[] = "----------";
     if(item->isDir == true){
         permissions[0] = 'd';
     }
     item->permissions = malloc(sizeof(permissions));
-    struct stat fileStat;
-    if(lstat(item->path,&fileStat)<0){
-        // fprintf(stderr,"Error: lstat(%s) failed 1. %s\n",item->path,strerror(errno));
-        item->lstatSuccessful = false;
+    if(item->lstatSuccessful == false){
+        fprintf(stderr,"Error: lstat(%s) failed (long listing). %s\n",item->path,strerror(errno));
         item->hardLinksCount = SENTINEL;
         strncpy(item->permissions,"-?????????",11);
         item->owner = "?";
@@ -182,28 +180,25 @@ void getLongListInfo(itemInDir* item, lsTargetInfo* folder, char* flags){
         item->mtime = SENTINEL;
         return;
     }
-    else {
-        item->lstatSuccessful = true;
-    }
-    strcpy(&permissions[1], (fileStat.st_mode & S_IRUSR) ? "r" : "-");
-    strcpy(&permissions[2], (fileStat.st_mode & S_IWUSR) ? "w" : "-");
-    strcpy(&permissions[3], (fileStat.st_mode & S_IXUSR) ? "x" : "-");
-    strcpy(&permissions[4], (fileStat.st_mode & S_IRGRP) ? "r" : "-");
-    strcpy(&permissions[5], (fileStat.st_mode & S_IWGRP) ? "w" : "-");
-    strcpy(&permissions[6], (fileStat.st_mode & S_IXGRP) ? "x" : "-");
-    strcpy(&permissions[7], (fileStat.st_mode & S_IROTH) ? "r" : "-");
-    strcpy(&permissions[8], (fileStat.st_mode & S_IWOTH) ? "w" : "-");
-    strcpy(&permissions[9], (fileStat.st_mode & S_IXOTH) ? "x" : "-");
+    strcpy(&permissions[1], (item->itemStat.st_mode & S_IRUSR) ? "r" : "-");
+    strcpy(&permissions[2], (item->itemStat.st_mode & S_IWUSR) ? "w" : "-");
+    strcpy(&permissions[3], (item->itemStat.st_mode & S_IXUSR) ? "x" : "-");
+    strcpy(&permissions[4], (item->itemStat.st_mode & S_IRGRP) ? "r" : "-");
+    strcpy(&permissions[5], (item->itemStat.st_mode & S_IWGRP) ? "w" : "-");
+    strcpy(&permissions[6], (item->itemStat.st_mode & S_IXGRP) ? "x" : "-");
+    strcpy(&permissions[7], (item->itemStat.st_mode & S_IROTH) ? "r" : "-");
+    strcpy(&permissions[8], (item->itemStat.st_mode & S_IWOTH) ? "w" : "-");
+    strcpy(&permissions[9], (item->itemStat.st_mode & S_IXOTH) ? "x" : "-");
 
     memcpy(item->permissions,permissions,sizeof(permissions));
-    item->hardLinksCount = fileStat.st_nlink;
+    item->hardLinksCount = item->itemStat.st_nlink;
     keepMax(folder->widths.hardLinksWidth,countDigits(item->hardLinksCount));
 
     struct passwd* pwd;
     struct group* grp;
 
-    pwd = getpwuid(fileStat.st_uid);
-    grp = getgrgid(fileStat.st_gid);
+    pwd = getpwuid(item->itemStat.st_uid);
+    grp = getgrgid(item->itemStat.st_gid);
 
     if(item->lstatSuccessful == true){
         char* owner = pwd->pw_name;
@@ -214,16 +209,16 @@ void getLongListInfo(itemInDir* item, lsTargetInfo* folder, char* flags){
         }
         item->owner = owner;
         item->group = group;
-        item->size = fileStat.st_size;
-        item->mtime = fileStat.st_mtime;
+        item->size = item->itemStat.st_size;
+        item->mtime = item->itemStat.st_mtime;
 
         keepMax(folder->widths.ownerWidth,strnlen(item->owner,256));
         keepMax(folder->widths.groupWidth,strnlen(item->group,256));
         keepMax(folder->widths.sizeWidth,countDigits(item->size));
     }
 
-    folder->totalBlocks += (fileStat.st_blocks/2);
-    getLinkInfo(item,fileStat,true);
+    folder->totalBlocks += (item->itemStat.st_blocks/2);
+    getLinkInfo(item,item->itemStat,true);
     if(item->isLink == true){
         item->permissions[0] = 'l';
         item->isDir = false;
@@ -239,7 +234,7 @@ void getLongListInfo(itemInDir* item, lsTargetInfo* folder, char* flags){
  * @param flags Flags from argv. If 'a' or 'A' are in the flags, for example, that will affect the outputItems
  * @param outputItems The items in that folder that will be listed when the dir contents are printed
  */
-int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsTargetInfo* folder){
+int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsRequestedItem* folder){
     struct dirent* dirp;
     DIR* dp;
     dp = opendir(dir);
@@ -286,8 +281,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsTar
         (outputItems[dirIndex]).name = strndup(dirp->d_name,256);
         (outputItems[dirIndex]).path = strndup(itemPath,PATH_MAX);
     
-        struct stat fileStat;
-        if(lstat(outputItems[dirIndex].path,&fileStat) == -1){
+        // struct stat outputItems[dirIndex].itemStat;
+        if(lstat(outputItems[dirIndex].path,&outputItems[dirIndex].itemStat) == -1){
             fprintf(stderr,"Error: lstat(%s) failed: %s\n",outputItems[dirIndex].path,strerror(errno));
             outputItems[dirIndex].lstatSuccessful = false;
             // dirIndex++;
@@ -296,11 +291,11 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsTar
         else {
             outputItems[dirIndex].lstatSuccessful = true;
         }
-        if(S_ISDIR(fileStat.st_mode) == 1){
+        if(S_ISDIR(outputItems[dirIndex].itemStat.st_mode) == 1){
             outputItems[dirIndex].isDir = true;
         }
         //getLinkInfo is called twice because sometimes S_ISLNK thinks something like .gitignore is a link
-        getLinkInfo(&outputItems[dirIndex],fileStat,false);
+        getLinkInfo(&outputItems[dirIndex],outputItems[dirIndex].itemStat,false);
 
         // printf("is link?: %d\n",S_ISLNK(fileStat.st_mode));
         if(has_l || has_n){
@@ -322,7 +317,7 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsTar
  * @param folders: A (blank) array of structs that contains information we need for printing the contents of a folder. 
  *      Modified by function
 */
-void ls(char* const flags, int argTargetCount, int* printTargetCount, char** const lsTargets, lsTargetInfo* folders){
+void ls(char* const flags, int argTargetCount, int* printTargetCount, char** const lsTargets, lsRequestedItem* folders){
     struct dirent* dirp;
     DIR* dp;
     *printTargetCount = argTargetCount;
@@ -331,9 +326,6 @@ void ls(char* const flags, int argTargetCount, int* printTargetCount, char** con
         //get number of items in the directory. We need this number so that we know how much space to alloc
         //for the struct. Accounts for all items, even ones we don't print
         size_t totalItemsInDir = 0;
-        // struct stat fileStat;
-        // char* itemPath = realpath(lsTargets[i],NULL);
-        // if((lstat))
         dp = opendir(lsTargets[i]);
         if(!dp){
             //we cannot open this directory, so move on to the next one.   
@@ -399,10 +391,10 @@ int sortByTime(const void* item1, const void* item2){
 
 /**
  * @brief Using the folder structs and the flags, sort the folder structs according to the flags
- * @param folders: lsTargetInfo structs to be sorted
+ * @param folders: lsRequestedItem structs to be sorted
  * @param flags: processed argv input flags
  */
-void sortOutput(lsTargetInfo* folders, char* const flags){
+void sortOutput(lsRequestedItem* folders, char* const flags){
     // printf("Flags: %s\n",flags);
     qsort((folders)->items,(folders)->itemCount,sizeof(itemInDir),sortByName);
 }
@@ -455,12 +447,12 @@ void createPrintConfig(itemInDir* items, int numItems){
 
 /**
  * @brief called when -l flag is specified. Print using long list format
- * @param printableFolders: lsTargetInfo structs that we actually print
+ * @param printableFolders: lsRequestedItem structs that we actually print
  * @param startIndex: for for loop, used for if -r flag is specified
  * @param step: 1 or -1 depending on if printing order is reversed (-r)
  * @param i: index into which of the printable folders we are printing
  */
-void longFormatPrint(lsTargetInfo* printableFolders, int startIndex, int step, int numItems, int i){
+void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step, int numItems, int i){
     for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
         char* timeString = calloc(13,sizeof(char));
         if(printableFolders[i].items[j].lstatSuccessful == false){
@@ -539,13 +531,13 @@ void longFormatPrint(lsTargetInfo* printableFolders, int startIndex, int step, i
  * @param folders: The folder structs we filled in with ls() 
  * @param flags: The flags string. 
 */
-void printLS(int argTargetCount, int printTargetCount, lsTargetInfo* folders, char* flags){
+void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders, char* flags){
     //we only care about the folders we can actually print
-    lsTargetInfo* printableFolders = malloc(printTargetCount*sizeof(lsTargetInfo));
+    lsRequestedItem* printableFolders = malloc(printTargetCount*sizeof(lsRequestedItem));
     for(int i=0, j=0;i<argTargetCount;i++){
         //copy over folders we need to print, skipping ones we don't
         if(folders[i].doWePrint){
-            memcpy(&printableFolders[j],&folders[i],sizeof(lsTargetInfo));
+            memcpy(&printableFolders[j],&folders[i],sizeof(lsRequestedItem));
             j++;
         }
     }
@@ -663,7 +655,7 @@ int main(int argc, char* argv[]){
         argTargetCount = 1;
     }
     //allocate space in case we need to print all the lsTargets.
-    lsTargetInfo* folders = malloc(argTargetCount*sizeof(lsTargetInfo));
+    lsRequestedItem* folders = malloc(argTargetCount*sizeof(lsRequestedItem));
     ls(flags,argTargetCount,&printTargetCount,lsTargets,folders);
     printLS(argTargetCount,printTargetCount,folders,flags);
     free(folders);
