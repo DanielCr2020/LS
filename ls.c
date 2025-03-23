@@ -87,13 +87,13 @@ int countDigits(int num){
     * @param argTargetCount: The number of directories passed in through argv
 */
 void getFlagsAndDirs(int argc, char** const argv, char* outputFlags, char** outputTargets, int* flagCount, int* argTargetCount){
-    for(int i=0;i<argc;i++){    //loop over each arg in argv
+    for(int i = 0; i < argc; i++){    //loop over each arg in argv
         bool isFlag = false;
         if(argv[i][0] == '-'){
             isFlag = true;
         }
         //loop over each character in a given argument
-        for(int j=0;j<strnlen(argv[i],1024);j++){
+        for(int j = 0; j < strnlen(argv[i],1024); j++){
             if(isFlag && argv[i][j] != '-'){
                 (outputFlags[*flagCount]) = argv[i][j];
                 // printf("flag: %c\n",outputFlags[*flagCount]);
@@ -171,7 +171,7 @@ void getLongListInfo(itemInDir* item, lsRequestedItem* folder, char* flags){
     }
     item->permissions = malloc(sizeof(permissions));
     if(item->lstatSuccessful == false){
-        fprintf(stderr,"Error: lstat(%s) failed (long listing). %s\n",item->path,strerror(errno));
+        // fprintf(stderr,"Error: lstat(%s) failed (long listing). %s\n",item->path,strerror(errno));
         item->hardLinksCount = SENTINEL;
         strncpy(item->permissions,"-?????????",11);
         item->owner = "?";
@@ -244,9 +244,9 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsReq
         return 0;
     }
     int dirIndex = 0;
-    char* has_l = "\0";
-    has_l = strchr(flags,'l');
-    char* has_n = strchr(flags,'n');
+    // char* has_l = "\0";
+    // has_l = strchr(flags,'l');
+    // char* has_n = strchr(flags,'n');
     char* has_f = strchr(flags,'f');
     //these cause valgrind errors. Will fix later
     char* has_a = "\0";
@@ -257,6 +257,8 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsReq
         //sets these to false so they are not set true by garbage values
         outputItems[dirIndex].isDir = false;
         outputItems[dirIndex].isLink = false;
+        //set name width padding to 0 to prepare for pretty printing
+        outputItems[dirIndex].nameWidthPadding = 0;
         //strchr(flags,'a') == NULL   -> 'a' is not a given flag
 
         if(!has_a && !has_A && !has_f){
@@ -298,9 +300,9 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsReq
         getLinkInfo(&outputItems[dirIndex],outputItems[dirIndex].itemStat,false);
 
         // printf("is link?: %d\n",S_ISLNK(fileStat.st_mode));
-        if(has_l || has_n){
+        // if(has_l || has_n){
             getLongListInfo(&outputItems[dirIndex],folder,flags);
-        }
+        // }
         dirIndex++;
     }
     closedir(dp);
@@ -322,7 +324,7 @@ void ls(char* const flags, int argTargetCount, int* printTargetCount, char** con
     DIR* dp;
     *printTargetCount = argTargetCount;
     //main loop. ls for one directory at a time
-    for(int i=0;i<argTargetCount;i++){       
+    for(int i = 0; i < argTargetCount; i++){       
         //get number of items in the directory. We need this number so that we know how much space to alloc
         //for the struct. Accounts for all items, even ones we don't print
         size_t totalItemsInDir = 0;
@@ -330,7 +332,7 @@ void ls(char* const flags, int argTargetCount, int* printTargetCount, char** con
         if(!dp){
             //we cannot open this directory, so move on to the next one.   
             fprintf(stderr,"ls: cannot access '%s': %s",lsTargets[i],strerror(errno));
-            if(i<argTargetCount){
+            if(i < argTargetCount){
                 printf("\n");
             }
             (*printTargetCount)--;
@@ -367,7 +369,7 @@ void ls(char* const flags, int argTargetCount, int* printTargetCount, char** con
 }
 
 void trimTime(char* timeString, char* outputString){
-    for(int i = 4;i<16;i++){
+    for(int i = 4; i < 16; i++){
         outputString[i-4] = timeString[i];
     }
 }
@@ -408,41 +410,91 @@ int sortLengths(const void* item1, const void* item2){
     return ((itemInDir*) item1)->nameLength < ((itemInDir*) item2)->nameLength;
 }
 
+
+
 //table printing
-void createPrintConfig(itemInDir* items, int numItems){
+void createPrintConfig(itemInDir* items, int numItems, int* finalRowCount, int* finalColCount){
     //handling terminal width
     struct winsize w;
     ioctl(STDOUT_FILENO,TIOCGWINSZ,&w);
-    // int rows = w.ws_row;
-    int cols = w.ws_col;        //usable width
-    // printf("Rows: %d, cols: %d\n",rows,cols);
+    int cols = w.ws_col - 2;        //usable width
 
-    // int minColumnWidth = 3; //1 char + 2 spaces
-    // int maxItemsPerRow = rows / minColumnWidth;
+    int colCount = 1;  //items across
+    int rowCount = numItems; //items down (in that column)
 
-
-
-    for(int i=0;i<numItems;i++){
-        items[i].nameLength = strnlen(items[i].name,256);
-    }
-    itemInDir* items2 = malloc(sizeof(itemInDir)*numItems);
-    memcpy(items2,items,sizeof(itemInDir)*numItems);
-    qsort(items2,numItems,sizeof(itemInDir),sortLengths);
-
-    //find starting table configuration
-    int usedLength = 0;
-    int minimumCols = 0;
-    for(int i=0;i<numItems-1;i++){
-        // printf("Lengths: %s: %d\n",items2[i].name,items2[i].nameLength); 
-        usedLength += items2[i].nameLength + 2;
-        if(usedLength + items2[i+1].nameLength > cols){
+    //get used with. try different table configurations until max usable width is achieved
+    int usedWidth = -2;     //account for no padding at end of row
+    bool foundConfiguration = false;
+    int configRows = 0;
+    int configCols = 0;
+    while(true){
+        //build configuration
+        rowCount = (int)ceil((float)numItems/colCount);
+        //Find max width for each column
+        int maxWidth = 0;
+        for(int col = 0; col < colCount; col++){
+            maxWidth = 0;   //each column has a different max width
+            for(int row = 0; row < rowCount; row++){
+                if(col*rowCount+row >= numItems){
+                    break;
+                }
+                keepMax(maxWidth, strlen(items[col*rowCount+row].name));
+            }
+            //set width padding for each column
+            for(int row = 0; row < rowCount; row++){
+                if(col*rowCount+row >= numItems){
+                    break;
+                }
+                items[col*rowCount+row].nameWidthPadding = maxWidth - strlen(items[col*rowCount+row].name) + 2;
+            }
+        }
+        //check the total width of one row created by the total widths for all the columns
+        usedWidth = -2;
+        for(int i = 0; i < colCount; i++){
+            usedWidth += items[min(i*rowCount,numItems-1)].nameWidthPadding + strlen(items[min(i*rowCount,numItems-1)].name);
+        }
+        //if the width created is greater than the max width, take away one column. Remake the previous configuration
+        if(usedWidth > cols){
+            foundConfiguration = true;
+            configCols = colCount - 1;
+            configRows = (int)ceil((float)numItems/configCols);
+            //set final width padding
+            maxWidth = 0;
+            for(int col = 0; col < configCols; col++){
+                //get final max width for each column
+                maxWidth = 0;   //each column has a different max width
+                for(int row = 0; row < configRows; row++){
+                    if(col*configRows+row >= numItems){
+                        break;
+                    }
+                    keepMax(maxWidth, strlen(items[col*configRows+row].name));
+                }
+                //set final width padding for each column
+                for(int row = 0; row < configRows; row++){
+                    if(col*configRows+row >= numItems){
+                        break;
+                    }
+                    items[col*configRows+row].nameWidthPadding = maxWidth - strlen(items[col*configRows+row].name) + 2;
+                }
+            }
             break;
         }
-        minimumCols++;
+        //try one more column
+        if(foundConfiguration == false){
+            colCount++;
+        }
     }
-    // printf("%d %d\n",usedLength,minimumCols);
-    
-    free(items2);
+
+    //occasionally ran into issues with final row and col count not being set
+    //I believe it has been fixed, but not 100% sure
+    if(configCols == 0){
+        configCols = colCount;
+    }
+    if(configRows == 0){
+        configRows = rowCount;
+    }
+    *finalColCount = configCols;
+    *finalRowCount = configRows;
 }
 
 /**
@@ -453,7 +505,7 @@ void createPrintConfig(itemInDir* items, int numItems){
  * @param i: index into which of the printable folders we are printing
  */
 void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step, int numItems, int i){
-    for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
+    for(int j = startIndex; step == -1 ? j >= 0 : j < numItems; j += step){
         char* timeString = calloc(13,sizeof(char));
         if(printableFolders[i].items[j].lstatSuccessful == false){
             strncpy(timeString,"           ?",13);
@@ -534,7 +586,7 @@ void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step
 void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders, char* flags){
     //we only care about the folders we can actually print
     lsRequestedItem* printableFolders = malloc(printTargetCount*sizeof(lsRequestedItem));
-    for(int i=0, j=0;i<argTargetCount;i++){
+    for(int i = 0, j = 0; i < argTargetCount;i ++){
         //copy over folders we need to print, skipping ones we don't
         if(folders[i].doWePrint){
             memcpy(&printableFolders[j],&folders[i],sizeof(lsRequestedItem));
@@ -551,31 +603,23 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
     //if f flag is present, do not sort output
     if(!strchr(flags,'f')){
         sortOutput(folders, flags);
+        for(int i = 0; i < printTargetCount; i++){
+            qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortByName);
+        }
     }
 
 
 
     //print the structs
-    for(int i=0;i<printTargetCount;i++){
+    for(int i = 0; i < printTargetCount; i++){
         int numItems = printableFolders[i].itemCount;
-        //sort by size, highest size first
+        // if(!strchr(flags,'f')){
+        //     qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortByName);
+        // }
+        // //sort by size, highest size first
         if(strchr(flags,'S')){
             qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortBySize);
         }
-        // printf("\nItems in folder: %d\n",numItems);
-
-        //set up for formatted printing
-        // nameAndLen names[numItems];
-        // for(int j=0;j<numItems;j++){
-            // int len = strlen(printableFolders[i].items[j].name);
-            // names[j].name = printableFolders[i].items[j].name;
-            // names[j].len = len;
-        // }
-        // qsort(names,numItems,sizeof(nameAndLen),sortNames);
-
-        // for(int j=0;j<numItems;j++){
-        //     printf("%s, %d\n",names[j].name,names[j].len);
-        // }
 
         //if we print more than one dir, we want the path listed above the contents
         if(printableFolders[i].showPath){
@@ -588,8 +632,14 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
         }
         //go in reverse if -r flag is specified
         if(strchr(flags,'r')){
-            startIndex = numItems-1;
-            step = -1;
+            int left = 0, right = numItems - 1;
+            while(left < right){
+                itemInDir temp = printableFolders[i].items[left];
+                printableFolders[i].items[left] = printableFolders[i].items[right];
+                printableFolders[i].items[right] = temp;
+                left++;
+                right--;
+            }
         }
 
         //print each item in each printable folder, colorzing directories as blue
@@ -599,24 +649,34 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
         }
         //if not using long listing format
         else {
-            createPrintConfig(printableFolders[i].items,numItems);
-            for(int j = startIndex;step == -1 ? j >= 0 : j<numItems;j += step){
-                // printf("")
-                if(printableFolders[i].items[j].isDir == true){
-                    printf("%s%s%s  ",BLUE, printableFolders[i].items[j].name, DEFAULT);
+            int rowCount = 0, colCount = 0;
+            createPrintConfig(printableFolders[i].items,numItems,&rowCount,&colCount);
+            for(int row = 0; row < rowCount; row++){
+                for(int col = 0; col < colCount; col++){
+                    if(col*rowCount+row >= numItems){
+                        break;
+                    }
+                    if(printableFolders[i].items[col*rowCount+row].isDir == true){
+                        printf("%s%s%s",BLUE, printableFolders[i].items[col*rowCount+row].name, DEFAULT);
+                    }
+                    //check for link first because the "default" print case should be last
+                    else if(printableFolders[i].items[col*rowCount+row].isLink == true){
+                        printf("%s%s%s",CYAN, printableFolders[i].items[col*rowCount+row].name, DEFAULT);
+                    }
+                    else if(printableFolders[i].items[col*rowCount+row].isDir == false){
+                        printf("%s",printableFolders[i].items[col*rowCount+row].name);
+                    }
+                    if(col != colCount - 1){
+                        printf("%*s",printableFolders[i].items[col*rowCount+row].nameWidthPadding,"");
+                    }
+                    free(printableFolders[i].items[col*rowCount+row].name);
+                    free(printableFolders[i].items[col*rowCount+row].path);
+                    if(printableFolders[i].items[col*rowCount+row].isLink){
+                        free(printableFolders[i].items[col*rowCount+row].link);
+                    }
                 }
-                //check for link first because the "default" print case should be last
-                else if(printableFolders[i].items[j].isLink == true){
-                    printf("%s%s%s  ",CYAN, printableFolders[i].items[j].name, DEFAULT);
-                }
-                else if(printableFolders[i].items[j].isDir == false){
-                    printf("%s  ",printableFolders[i].items[j].name);
-                }
-                free(printableFolders[i].items[j].name);
-                free(printableFolders[i].items[j].path);
-                if(printableFolders[i].items[j].isLink){
-                    free(printableFolders[i].items[j].link);
-                }
+                if(row < rowCount-1)
+                    puts("");
             }
         }
         //don't print a blank line for folders with no items
@@ -626,7 +686,7 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
     }
 
     //Cleanup
-    for(int i=0;i<argTargetCount;i++){
+    for(int i = 0;i < argTargetCount; i++){
         if(folders[i].showPath){
             free(folders[i].path);
         }
@@ -641,6 +701,8 @@ int main(int argc, char* argv[]){
     // qsort(&sortedArgs[1],argc-1,sizeof(char*),&argSortComp);
     // char** args = malloc((argc+1)*sizeof(*args));
     char** lsTargets = malloc((argc+1)*sizeof(*lsTargets));
+
+    //gonna change argument handling to getopt() eventually
 
     char flags[1024] = {'0'};
 
@@ -661,7 +723,7 @@ int main(int argc, char* argv[]){
     free(folders);
 
     //cleanup (kinda)
-    for(int i=0;i<argc;i++){
+    for(int i = 0; i < argc; i++){
         free(lsTargets[i]);
     }
     free(lsTargets);

@@ -1,7 +1,7 @@
 TARGET_EXEC=ls
 SOURCE=ls.c ls.h
 CC=gcc
-FLAGS=-Wall -Wpedantic -pedantic-errors -g -fstack-protector-all
+FLAGS=-Wall -Wpedantic -pedantic-errors -g -fstack-protector-all -lm
 
 all: $(TARGET_EXEC)
 

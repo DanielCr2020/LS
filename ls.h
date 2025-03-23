@@ -9,7 +9,8 @@
 
 #define SENTINEL -1
 #define max(a,b) a < b ? b : a
-#define keepMax(a,b) a < b ? a=b : a
+#define min(a,b) a > b ? b : a
+#define keepMax(a,b) a < b ? a=b : a    //set a to b if b > a
 
 //maximum widths for each attribute
 typedef struct widthInfo {
@@ -19,7 +20,7 @@ typedef struct widthInfo {
     int groupWidth;
     int sizeWidth;
     //int timeWidth;
-    // int nameWidth;
+    int nameWidth;      //used for pretty table printing
 } widthInfo;
 
 //these will be populated with information from ls(), and then sorted and printed
@@ -38,12 +39,13 @@ typedef struct itemInDir {
     int hardLinksCount;
     char* owner;
     char* group;
-    size_t size;    //file size
+    ssize_t size;    //file size
     long mtime;    //modified time
     bool lstatSuccessful;
     char* link;     //where the link points to if the file is a link
     bool pointsToDir;   //if the file is a link, then does the file point to a directory?
     bool isLink;
+    int nameWidthPadding;
 
 } itemInDir;        //each item in a directory
 
