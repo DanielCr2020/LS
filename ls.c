@@ -12,6 +12,7 @@
 #include <sys/ioctl.h>
 #include <time.h>
 #include <math.h>
+#include <getopt.h>
 #include "ls.h"
 
 /*
@@ -244,30 +245,20 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsReq
         return 0;
     }
     int dirIndex = 0;
-    // char* has_l = "\0";
-    // has_l = strchr(flags,'l');
-    // char* has_n = strchr(flags,'n');
-    char* has_f = strchr(flags,'f');
-    //these cause valgrind errors. Will fix later
-    char* has_a = "\0";
-    has_a = strchr(flags,'a');
-    char* has_A = "\0";
-    has_A = strchr(flags,'A');
     while((dirp = readdir(dp)) != NULL){
         //sets these to false so they are not set true by garbage values
         outputItems[dirIndex].isDir = false;
         outputItems[dirIndex].isLink = false;
         //set name width padding to 0 to prepare for pretty printing
         outputItems[dirIndex].nameWidthPadding = 0;
-        //strchr(flags,'a') == NULL   -> 'a' is not a given flag
 
-        if(!has_a && !has_A && !has_f){
+        if(aflag == 0 && Aflag == 0 && fflag == 0){
             //skip entries that start with .
             if(dirp->d_name[0] == '.'){
                 continue;
             }
         }
-        if(has_A && has_A>has_a){
+        if(Aflag != 0 && Aflag > aflag){
             if(strcmp(dirp->d_name,".") == 0 || strcmp(dirp->d_name,"..") == 0){
                 continue;
             }
@@ -300,7 +291,7 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsReq
         getLinkInfo(&outputItems[dirIndex],outputItems[dirIndex].itemStat,false);
 
         // printf("is link?: %d\n",S_ISLNK(fileStat.st_mode));
-        // if(has_l || has_n){
+        // if(lflag || nflag){
             getLongListInfo(&outputItems[dirIndex],folder,flags);
         // }
         dirIndex++;
@@ -594,8 +585,6 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
         }
     }
 
-    char* has_l = strchr(flags,'l');
-    char* has_n = strchr(flags,'n');
     int startIndex = 0;
     int step = 1;
 
@@ -631,7 +620,7 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
             printf("%s:\n",printableFolders[i].path);
         }
         //go in reverse if -r flag is specified
-        if(strchr(flags,'r')){
+        if(rflag){
             int left = 0, right = numItems - 1;
             while(left < right){
                 itemInDir temp = printableFolders[i].items[left];
@@ -643,7 +632,7 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
         }
 
         //print each item in each printable folder, colorzing directories as blue
-        if(has_l || has_n){
+        if(lflag || nflag){
             printf("total %ld\n",printableFolders[i].totalBlocks);
             longFormatPrint(printableFolders,startIndex,step,numItems,i);
         }
@@ -709,6 +698,75 @@ int main(int argc, char* argv[]){
     int flagCount = 0;
     int argTargetCount = 0;       //number of lsTargets passed in through argv
     int printTargetCount = 0;     //number of lsTargets that we can actually print
+
+    int opt;
+    //used to get order/position of argument
+    int counter = 0;
+    while((opt = getopt(argc, argv, "AalrfnScdFhikqRstuw")) != -1){
+        counter++;
+        switch(opt){
+            case 'A':
+                Aflag = counter;
+                break;
+            case 'a':
+                aflag = counter;
+                break;
+            case 'l':
+                lflag = counter;
+                break;
+            case 'r':
+                rflag = counter;
+                break;
+            case 'f':
+                fflag = counter;
+                break;
+            case 'n':
+                nflag = counter;
+                break;
+            case 'S':
+                Sflag = counter;
+                break;
+            case 'c':
+                cflag = counter;
+                break;
+            case 'd':
+                dflag = counter;
+                break;
+            case 'F':
+                Fflag = counter;
+                break;
+            case 'h':
+                hflag = counter;
+                break;
+            case 'i':
+                iflag = counter;
+                break;
+            case 'k':
+                kflag = counter;
+                break;
+            case 'q':
+                qflag = counter;
+                break;
+            case 'R':
+                Rflag = counter;
+                break;
+            case 's':
+                sflag = counter;
+                break;
+            case 't':
+                tflag = counter;
+                break;
+            case 'u':
+                uflag = counter;
+                break;
+            case 'w':
+                wflag = counter;
+                break;
+        }
+
+        printf("aflag: %d, Aflag: %d, opt: %d\n",aflag,Aflag,opt);
+    }
+    
     getFlagsAndDirs(argc,argv,flags,lsTargets,&flagCount,&argTargetCount);
     //run ls on the current dirctory if we don't provide any directory arguments
     if(argTargetCount<1){
