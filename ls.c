@@ -25,6 +25,9 @@
     -n:  The same as −l, except that the owner and group IDs are displayed numerically rather than 
     converting to a owner or group name.
     -S: Sort by size, largest file first.
+    -t: Sort by time modified (most recently modified first) before sorting the operands by lexicographical
+order.
+    -u: Use time of last access, instead of last modification of the file for sorting ( −t ) or printing ( −l ) 
 
     Flags to do:
     -c: Use time when file status was last changed, instead of time of last modification of the file for 
@@ -45,18 +48,9 @@ output is to a terminal.
     -s: Display the number of file system blocks actually used by each file, in units of 512 bytes or
 BLOCKSIZE (see ENVIRONMENT) where partial units are rounded up to the next integer value.
 If the output is to a terminal, a total sum for all the file sizes is output on a line before the listing.
-    -t: Sort by time modified (most recently modified first) before sorting the operands by lexicographical
-order.
-    -u: Use time of last access, instead of last modification of the file for sorting ( −t ) or printing ( −l ) 
+
     -w: Force raw printing of non-printable characters. This is the default when output is not to a terminal.
 */
-
-int argSortComp(const void* argA, const void* argB){
-    if(((char*)argA)[0] == '-'){
-        return -1;
-    }
-    else return strncasecmp(*(char* const*)argA, *(char* const*)argB, 1024);
-}
 
 /**
  * @brief Counts how many digits are in the input number
@@ -110,14 +104,6 @@ void getFlagsAndDirs(int argc, char** const argv, char* outputFlags, char** outp
     // printf("Output flags: %s\n",outputFlags);2
 }
 
-/**
- * @brief Given all the dirs, tells us which dirs we actually need to run ls on
- * @param inputDirs: The 2D array of directories passed in through argv
- * @param outputTargets: A 2D array of dirs that we actually need to run ls on. Modified by function.
- */
-void whichDirs(char** const inputDirs, char** outputTargets, int arg){
-
-}
 /**
  * @brief Checks if item is a link using S_ISLNK. Only sets item as a link if S_ISLNK is true,
  * and the file it points to makes sense
@@ -177,8 +163,8 @@ void getLongListInfo(itemInDir* item, lsRequestedItem* folder, char* flags){
         strncpy(item->permissions,"-?????????",11);
         item->owner = "?";
         item->group = "?";
-        item->size = SENTINEL; //sentinel value
-        item->mtime = SENTINEL;
+        item->itemStat.st_size = SENTINEL; //sentinel value
+        item->itemStat.st_mtime = SENTINEL;
         return;
     }
     strcpy(&permissions[1], (item->itemStat.st_mode & S_IRUSR) ? "r" : "-");
@@ -204,18 +190,18 @@ void getLongListInfo(itemInDir* item, lsRequestedItem* folder, char* flags){
     if(item->lstatSuccessful == true){
         char* owner = pwd->pw_name;
         char* group = grp->gr_name;
-        if(strchr(flags,'n')){
+        if(nflag){
             sprintf(owner,"%d",pwd->pw_uid);
             sprintf(group,"%d",grp->gr_gid);
         }
         item->owner = owner;
         item->group = group;
-        item->size = item->itemStat.st_size;
-        item->mtime = item->itemStat.st_mtime;
+        // item->size = item->itemStat.st_size;
+        // item->mtime = item->itemStat.st_mtime;
 
         keepMax(folder->widths.ownerWidth,strnlen(item->owner,256));
         keepMax(folder->widths.groupWidth,strnlen(item->group,256));
-        keepMax(folder->widths.sizeWidth,countDigits(item->size));
+        keepMax(folder->widths.sizeWidth,countDigits(item->itemStat.st_size));
     }
 
     folder->totalBlocks += (item->itemStat.st_blocks/2);
@@ -374,12 +360,24 @@ int sortFoldersByName(const void* name1, const void* name2){
 }
 
 int sortBySize(const void* item1, const void* item2){
-    return ((itemInDir*) item1)->size < ((itemInDir*) item2)->size;
+    return ((itemInDir*) item1)->itemStat.st_size < ((itemInDir*) item2)->itemStat.st_size;
 }
 
 //sort by modified time
-int sortByTime(const void* item1, const void* item2){
-    return ((itemInDir*) item1)->mtime < ((itemInDir*) item2)->mtime;
+int sortByMtime(const void* item1, const void* item2){
+    return ((itemInDir*) item1)->itemStat.st_mtime < ((itemInDir*) item2)->itemStat.st_mtime;
+}
+
+//sort by access time
+int sortByAtime(const void* item1, const void* item2){
+                                                // <= makes this comparison actually correct
+    return ((itemInDir*) item1)->itemStat.st_atime <= ((itemInDir*) item2)->itemStat.st_atime;
+}
+
+//sort by status change time
+int sortByCtime(const void* item1, const void* item2){
+                                                // <= makes this comparison actually correct
+    return ((itemInDir*) item1)->itemStat.st_ctime < ((itemInDir*) item2)->itemStat.st_ctime;
 }
 
 /**
@@ -502,7 +500,7 @@ void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step
             strncpy(timeString,"           ?",13);
         }
         else{
-            trimTime(ctime(&printableFolders[i].items[j].mtime),timeString);
+            trimTime(ctime(&printableFolders[i].items[j].itemStat.st_mtime),timeString);
         }
 
         //permissions
@@ -523,10 +521,10 @@ void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step
         else
             printf("%*s ",printableFolders[i].widths.groupWidth,printableFolders[i].items[j].group);
         //size
-        if(printableFolders[i].items[j].size == SENTINEL)
+        if(printableFolders[i].items[j].itemStat.st_size == SENTINEL)
             printf("%*s ", printableFolders[i].widths.sizeWidth,"?");
         else
-            printf("%*ld ", printableFolders[i].widths.sizeWidth,printableFolders[i].items[j].size);
+            printf("%*ld ", printableFolders[i].widths.sizeWidth,printableFolders[i].items[j].itemStat.st_size);
         //time
         printf("%s ", timeString);
         //name
@@ -590,7 +588,7 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
 
     //if no f flag, sort output (by name)
     //if f flag is present, do not sort output
-    if(!strchr(flags,'f')){
+    if(!fflag){
         sortOutput(folders, flags);
         for(int i = 0; i < printTargetCount; i++){
             qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortByName);
@@ -602,13 +600,7 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
     //print the structs
     for(int i = 0; i < printTargetCount; i++){
         int numItems = printableFolders[i].itemCount;
-        // if(!strchr(flags,'f')){
-        //     qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortByName);
-        // }
         // //sort by size, highest size first
-        if(strchr(flags,'S')){
-            qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortBySize);
-        }
 
         //if we print more than one dir, we want the path listed above the contents
         if(printableFolders[i].showPath){
@@ -618,6 +610,18 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
                 printf("\n");
             }
             printf("%s:\n",printableFolders[i].path);
+        }
+        if(Sflag){  //size
+            qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortBySize);
+        }
+        if(tflag){  //modified time
+            qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortByMtime);
+        }
+        if(uflag){  //access time
+            qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortByAtime);
+        }
+        if(cflag){  //status change time
+            qsort(printableFolders[i].items,printableFolders[i].itemCount,sizeof(itemInDir),sortByCtime);
         }
         //go in reverse if -r flag is specified
         if(rflag){
@@ -685,10 +689,6 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
 }
 
 int main(int argc, char* argv[]){
-    // char** sortedArgs = malloc(argc*sizeof(char*));
-    // memcpy(sortedArgs,argv,argc*sizeof(char*));
-    // qsort(&sortedArgs[1],argc-1,sizeof(char*),&argSortComp);
-    // char** args = malloc((argc+1)*sizeof(*args));
     char** lsTargets = malloc((argc+1)*sizeof(*lsTargets));
 
     //gonna change argument handling to getopt() eventually
@@ -764,7 +764,6 @@ int main(int argc, char* argv[]){
                 break;
         }
 
-        printf("aflag: %d, Aflag: %d, opt: %d\n",aflag,Aflag,opt);
     }
     
     getFlagsAndDirs(argc,argv,flags,lsTargets,&flagCount,&argTargetCount);
