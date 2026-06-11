@@ -12,9 +12,6 @@
 #define min(a,b) a > b ? b : a
 #define keepMax(a,b) a < b ? a=b : a    //set a to b if b > a
 
-int Aflag = 0, aflag = 0, lflag = 0, rflag = 0, fflag = 0, nflag = 0, Sflag = 0, cflag = 0, dflag = 0, Fflag = 0, hflag = 0, iflag = 0, kflag = 0;
-int qflag = 0, Rflag = 0, sflag = 0, tflag = 0, uflag = 0, wflag = 0;
-
 //maximum widths for each attribute
 typedef struct widthInfo {
     //int permissionsWidth;
@@ -42,12 +39,11 @@ typedef struct itemInDir {
     int hardLinksCount;
     char* owner;
     char* group;
-    ssize_t size;    //file size
-    long mtime;    //modified time
     bool lstatSuccessful;
     char* link;     //where the link points to if the file is a link
     bool pointsToDir;   //if the file is a link, then does the file point to a directory?
     bool isLink;
+    bool isExecutable;
     int nameWidthPadding;
 
 } itemInDir;        //each item in a directory
