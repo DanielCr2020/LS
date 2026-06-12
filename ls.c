@@ -165,7 +165,7 @@ void getLongListInfo(itemInDir* item, lsRequestedItem* folder, char* flags){
     if(item->isDir == true){
         permissions[0] = 'd';
     }
-    item->permissions = malloc(sizeof(permissions));
+    // item->permissions = malloc(sizeof(permissions));
     if(item->lstatSuccessful == false){
         // fprintf(stderr,"Error: lstat(%s) failed (long listing). %s\n",item->path,strerror(errno));
         item->hardLinksCount = SENTINEL;
@@ -247,6 +247,7 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsReq
         //sets these to false so they are not set true by garbage values
         outputItems[dirIndex].isDir = false;
         outputItems[dirIndex].isLink = false;
+        outputItems[dirIndex].isExecutable = false;
         //set name width padding to 0 to prepare for pretty printing
         outputItems[dirIndex].nameWidthPadding = 0;
 
@@ -353,7 +354,11 @@ void ls(char* const flags, int argTargetCount, int* printTargetCount, char** con
 
         //allocate space for info for each item in dir
         folders[i].items = (itemInDir*)malloc(totalItemsInDir*sizeof(itemInDir));
-        // folders[i].widths = calloc(sizeof(widthInfo),1);
+        folders[i].widths.groupWidth = 0;
+        folders[i].widths.hardLinksWidth = 0;
+        folders[i].widths.nameWidth = 0;
+        folders[i].widths.ownerWidth = 0;
+        folders[i].widths.sizeWidth = 0;
         folders[i].itemCount = whichItems(lsTargets[i],flags,folders[i].items,&folders[i]);
 
         folders[i].doWePrint = true;
@@ -365,6 +370,8 @@ void trimTime(char* timeString, char* outputString){
     for(int i = 4; i < 16; i++){
         outputString[i-4] = timeString[i];
     }
+    // printf("Time string: %s",timeString);
+    // printf("Output string: %s\n",outputString);
 }
 
 int sortByName(const void* name1, const void* name2){
@@ -521,31 +528,95 @@ void createPrintConfig(itemInDir* items, int numItems, int* finalRowCount, int* 
  */
 void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step, int numItems, int i){
     for(int j = startIndex; step == -1 ? j >= 0 : j < numItems; j += step){
-        char* timeString = calloc(13,sizeof(char));
+        char timeString[64];
         if(printableFolders[i].items[j].lstatSuccessful == false){
             strncpy(timeString,"           ?",13);
         }
         else{
-            trimTime(ctime(&printableFolders[i].items[j].itemStat.st_mtime),timeString);
+            time_t modifiedTime = printableFolders[i].items[j].itemStat.st_mtime;
+            time_t now;
+            time(&now);
+            struct tm* currentTime = localtime(&now);
+            int currentYear = currentTime->tm_year + 1900;
+            struct tm* timeInfo = localtime(&modifiedTime);
+            //Construct time string manually to account for differences in needing year or time
+            int min = timeInfo->tm_min;
+            int hour = timeInfo->tm_hour;
+            int date = timeInfo->tm_mday;
+            int month = timeInfo->tm_mon;
+            int year  = timeInfo->tm_year + 1900;
+
+            char* monthString = NULL;
+            switch(month){
+                case 0:
+                    monthString = "Jan";
+                    break;
+                case 1:
+                    monthString = "Feb";
+                    break;
+                case 2:
+                    monthString = "Mar";
+                    break;
+                case 3:
+                    monthString = "Apr";
+                    break;
+                case 4:
+                    monthString = "May";
+                    break;
+                case 5:
+                    monthString = "Jun";
+                    break;
+                case 6:
+                    monthString = "Jul";
+                    break;
+                case 7:
+                    monthString = "Aug";
+                    break;
+                case 8:
+                    monthString = "Sep";
+                    break;
+                case 9:
+                    monthString = "Oct";
+                    break;
+                case 10:
+                    monthString = "Nov";
+                    break;
+                case 11:
+                    monthString = "Dec";
+                    break;
+            }
+
+            char builtTimeString[64];
+
+            //if mtime is in the future, or the previous year, show year instead of time of day
+            char yearOrTime[16];
+            if(modifiedTime > now || year != currentYear){
+                snprintf(yearOrTime, sizeof(int)*8, "%d", year);
+            }
+            else {
+                sprintf(yearOrTime, "%0*d:%0*d", 2, hour, 2, min);
+            }
+            snprintf(builtTimeString, 64, "%s %2d %5s", monthString, date, yearOrTime);
+            strncpy(timeString,builtTimeString,16);
         }
 
         //permissions
         printf("%s ",printableFolders[i].items[j].permissions);
         //hard links count
-        if(printableFolders[i].items[j].hardLinksCount<0)
+        if(printableFolders[i].items[j].hardLinksCount < 0)
             printf("? ");
         else
             printf("%*d ", printableFolders[i].widths.hardLinksWidth,printableFolders[i].items[j].hardLinksCount);
         //owner
-        if(strcmp(printableFolders[i].items[j].owner,"?")==0)
-            printf("?%*s ",printableFolders[i].widths.ownerWidth-1,"");
+        if(strcmp(printableFolders[i].items[j].owner,"?") == 0)
+            printf("?%*s ",printableFolders[i].widths.ownerWidth - 1,"");
         else
             printf("%*s ",printableFolders[i].widths.ownerWidth,printableFolders[i].items[j].owner);
         //group
-        if(strcmp(printableFolders[i].items[j].group,"?")==0)
-            printf("?%*s ",printableFolders[i].widths.groupWidth-1,"");
+        if(strcmp(printableFolders[i].items[j].group,"?") == 0)
+            printf("?%*s ",printableFolders[i].widths.groupWidth - 1,"");
         else
-            printf("%*s ",printableFolders[i].widths.groupWidth,printableFolders[i].items[j].group);
+            printf("%-*s ",printableFolders[i].widths.groupWidth,printableFolders[i].items[j].group);
         //size
         if(printableFolders[i].items[j].itemStat.st_size == SENTINEL)
             printf("%*s ", printableFolders[i].widths.sizeWidth,"?");
@@ -558,10 +629,6 @@ void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step
         if(printableFolders[i].items[j].isDir == true){
             printf("%s%s%s",BLUE,printableFolders[i].items[j].name,DEFAULT);
         }
-        //if executable
-        else if(printableFolders[i].items[j].isExecutable == true){
-            printf("%s%s%s",GREEN,printableFolders[i].items[j].name,DEFAULT);
-        }
         //if link
         else if(printableFolders[i].items[j].isLink == true){
             printf("%s%s%s -> ",CYAN,printableFolders[i].items[j].name,DEFAULT);
@@ -571,6 +638,10 @@ void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step
             else{
                 printf("%s",printableFolders[i].items[j].link);
             }
+        }
+        //if executable
+        else if(printableFolders[i].items[j].isExecutable == true){
+            printf("%s%s%s",GREEN,printableFolders[i].items[j].name,DEFAULT);
         }
         //if neither dir nor link, print default
         else {
@@ -590,8 +661,6 @@ void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step
         }
         free(printableFolders[i].items[j].name);
         free(printableFolders[i].items[j].path);
-        free(printableFolders[i].items[j].permissions);
-        free(timeString);
     }
 }
 

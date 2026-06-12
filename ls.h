@@ -35,7 +35,7 @@ typedef struct itemInDir {
     struct stat itemStat;   //stat information for each file in a directory
 
     char* fileType; //?
-    char* permissions;  //permissions of the file
+    char permissions[10];  //permissions of the file
     int hardLinksCount;
     char* owner;
     char* group;
