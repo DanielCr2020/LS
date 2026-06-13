@@ -1,15 +1,21 @@
-TARGET_EXEC=ls
-SOURCE=ls.c ls.h
 CC=gcc
-CFLAGS=-Wall -Wpedantic -pedantic-errors -g -fstack-protector-all
+CFLAGS=-Wall -Wpedantic -pedantic-errors -g
 LDFLAGS=-lm
 
-all: $(TARGET_EXEC)
+TARGET=ls
+SRCS=$(wildcard *.c)
+HDRS=$(wildcard *.h)
+OBJS=$(SRCS:.c=.o)
 
-ls: $(SOURCE)
-	$(CC) $(SOURCE) -o $(TARGET_EXEC) $(CFLAGS) $(LDFLAGS)
+all: $(TARGET)
 
-.PHONY: clean
+$(TARGET): $(OBJS) $(HDRS)
+	$(CC) $(OBJS) -o $@ $(LDFLAGS)
+
+%.o: %.c %.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm $(TARGET_EXEC)
+	rm $(OBJS) $(TARGET)
+
+.PHONY: all clean

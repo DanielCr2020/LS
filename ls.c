@@ -14,6 +14,9 @@
 #include <time.h>
 #include <math.h>
 #include <getopt.h>
+#include "sort.h"
+
+// #pragma once
 #include "ls.h"
 
 int Aflag = 0, aflag = 0, lflag = 0, rflag = 0, fflag = 0, nflag = 0, Sflag = 0, cflag = 0, dflag = 0, Fflag = 0, hflag = 0, iflag = 0, kflag = 0;
@@ -21,10 +24,10 @@ int qflag = 0, Rflag = 0, sflag = 0, tflag = 0, uflag = 0, wflag = 0;
 
 /*
     Flags implemented:
-    -A
-    -a
-    -l
-    -r
+    -A: show almost all files, excluding . and ..
+    -a: show all files, even "hidden"
+    -l: long listing format
+    -r: reverse order
     -f: Output is not sorted.
     -n:  The same as −l, except that the owner and group IDs are displayed numerically rather than
     converting to a owner or group name.
@@ -139,7 +142,7 @@ void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall){
                 // return;
             }
             if(secondCall == false)
-                item->link = calloc(nbytes+1,1);
+                item->link = calloc(nbytes + 1,1);
             strncpy(item->link,pointsTo,nbytes);
             strcat(item->link,"\0");
             if(S_ISDIR(linkStat.st_mode)){
@@ -212,7 +215,7 @@ void getLongListInfo(itemInDir* item, lsRequestedItem* folder, char* flags){
         keepMax(folder->widths.groupWidth,strnlen(item->group,256));
         keepMax(folder->widths.sizeWidth,countDigits(item->itemStat.st_size));
     }
-
+    folder->totalBlocks = 0;        //makes valgrind happy
     folder->totalBlocks += (item->itemStat.st_blocks/2);
     getLinkInfo(item,item->itemStat,true);
     if(item->isLink == true){
@@ -226,59 +229,106 @@ void getLongListInfo(itemInDir* item, lsRequestedItem* folder, char* flags){
  * @brief In a given directory, which items do we need to run ls on
  * Also gives us the path to the items to make lstat() easier
  * @returns number of items to print. Accounts for -a and -A flags. Also checks if an item is a directory.
- * @param dir The current directory we are searching through
+ * @param dir The current directory or item we are searching through
  * @param flags Flags from argv. If 'a' or 'A' are in the flags, for example, that will affect the outputItems
  * @param outputItems The items in that folder that will be listed when the dir contents are printed
  */
-int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsRequestedItem* folder){
-    struct dirent* dirp;
-    DIR* dp;
-    dp = opendir(dir);
+int getItemInfo(char* const dir, char* const flags, itemInDir* outputItems, lsRequestedItem* folder){
+    // printf("Called getItemInfo on %s\n",dir);
+    bool isDir = false;
+    int dirIndex = 0;
     /*
     todo: add check for if single file (not a directory)
     */
-    if(!dp){
-        //if we cannot open the directory, print the error immediately.
-        fprintf(stderr,"ls: cannot access '%s': %s",dir,strerror(errno));
-        return 0;
+    struct stat targetStat;
+    //stat the item we are requesting
+    if(lstat(dir, &targetStat) == -1){
+        printf("Lstat before unsuccessful\n");
     }
-    int dirIndex = 0;
-    while((dirp = readdir(dp)) != NULL){
-        //sets these to false so they are not set true by garbage values
+
+    if(S_ISDIR(targetStat.st_mode)){
+        isDir = true;
+    }
+    else{
+        // printf("%s is not a dir\n", dir);
+    }
+    if(isDir == true){
+        struct dirent* dirp;
+        DIR* dp = opendir(dir);
+        if(!dp){
+            //if we cannot open the directory, print the error immediately.
+            fprintf(stderr,"ls: cannot access wi '%s': %s",dir,strerror(errno));
+        }
+        if(dp){
+            while((dirp = readdir(dp)) != NULL){
+                //sets these to false so they are not set true by garbage values
+                outputItems[dirIndex].isDir = false;
+                outputItems[dirIndex].isLink = false;
+                outputItems[dirIndex].isExecutable = false;
+                //set name width padding to 0 to prepare for pretty printing
+                outputItems[dirIndex].nameWidthPadding = 0;
+                if(aflag == 0 && Aflag == 0 && fflag == 0){
+                    //skip entries that start with .
+                    if(dirp->d_name[0] == '.'){
+                        continue;
+                    }
+                }
+                if(Aflag != 0 && Aflag > aflag){
+                    if(strcmp(dirp->d_name,".") == 0 || strcmp(dirp->d_name,"..") == 0){
+                        continue;
+                    }
+                }
+                char itemPath[PATH_MAX+1];      //+1 for newline
+                realpath(dir, itemPath);
+                // size_t dirnameLen = strnlen(dir,256-1);
+
+                (outputItems[dirIndex]).name = strndup(dirp->d_name,256);
+                (outputItems[dirIndex]).path = strndup(itemPath,PATH_MAX);
+
+                if(lstat(outputItems[dirIndex].path,&outputItems[dirIndex].itemStat) == -1){
+                    fprintf(stderr,"Error: lstat(%s) failed: %s\n",outputItems[dirIndex].path,strerror(errno));
+                    outputItems[dirIndex].lstatSuccessful = false;
+                }
+                else {
+                    outputItems[dirIndex].lstatSuccessful = true;
+                }
+                if((outputItems[dirIndex].itemStat.st_mode) & S_IXUSR){
+                    outputItems[dirIndex].isExecutable = true;
+                }
+                if(S_ISDIR(outputItems[dirIndex].itemStat.st_mode) == 1){
+                    outputItems[dirIndex].isDir = true;
+                }
+
+                //getLinkInfo is called twice because sometimes S_ISLNK thinks something like .gitignore is a link
+                getLinkInfo(&outputItems[dirIndex],outputItems[dirIndex].itemStat,false);
+
+                // printf("is link?: %d\n",S_ISLNK(fileStat.st_mode));
+                // if(lflag || nflag){
+                getLongListInfo(&outputItems[dirIndex],folder,flags);
+                // }
+                dirIndex++;
+            }
+            closedir(dp);
+        }
+    }
+    else if(isDir == false) {
         outputItems[dirIndex].isDir = false;
         outputItems[dirIndex].isLink = false;
         outputItems[dirIndex].isExecutable = false;
         //set name width padding to 0 to prepare for pretty printing
         outputItems[dirIndex].nameWidthPadding = 0;
 
-        if(aflag == 0 && Aflag == 0 && fflag == 0){
-            //skip entries that start with .
-            if(dirp->d_name[0] == '.'){
-                continue;
-            }
-        }
-        if(Aflag != 0 && Aflag > aflag){
-            if(strcmp(dirp->d_name,".") == 0 || strcmp(dirp->d_name,"..") == 0){
-                continue;
-            }
-        }
         char itemPath[PATH_MAX+1];      //+1 for newline
-        strncpy(itemPath,dir,PATH_MAX);
-        size_t dirnameLen = strnlen(dir,PATH_MAX-1);
-        if(itemPath[dirnameLen-1] != '/'){
-            itemPath[dirnameLen] = '/';
-            dirnameLen++;
-        }
-        strncat(itemPath,dirp->d_name,PATH_MAX);
-        (outputItems[dirIndex]).name = strndup(dirp->d_name,256);
+        realpath(dir, itemPath);
+        // strncpy(itemPath,dir,PATH_MAX);
+        // printf("Path: %s\n",itemPath);
+        // size_t dirnameLen = strnlen(dir,PATH_MAX-1);
+        (outputItems[dirIndex]).name = strndup(dir,256);
         (outputItems[dirIndex]).path = strndup(itemPath,PATH_MAX);
 
-        // struct stat outputItems[dirIndex].itemStat;
-        if(lstat(outputItems[dirIndex].path,&outputItems[dirIndex].itemStat) == -1){
-            fprintf(stderr,"Error: lstat(%s) failed: %s\n",outputItems[dirIndex].path,strerror(errno));
+        if(lstat(itemPath,&outputItems[dirIndex].itemStat) == -1){
+            fprintf(stderr,"Error: lstat(%s) failed 1: %s\n",outputItems[dirIndex].path,strerror(errno));
             outputItems[dirIndex].lstatSuccessful = false;
-            // dirIndex++;
-            // continue;
         }
         else {
             outputItems[dirIndex].lstatSuccessful = true;
@@ -286,153 +336,112 @@ int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsReq
         if((outputItems[dirIndex].itemStat.st_mode) & S_IXUSR){
             outputItems[dirIndex].isExecutable = true;
         }
-        if(S_ISDIR(outputItems[dirIndex].itemStat.st_mode) == 1){
-            outputItems[dirIndex].isDir = true;
-        }
 
-        //getLinkInfo is called twice because sometimes S_ISLNK thinks something like .gitignore is a link
         getLinkInfo(&outputItems[dirIndex],outputItems[dirIndex].itemStat,false);
 
-        // printf("is link?: %d\n",S_ISLNK(fileStat.st_mode));
-        // if(lflag || nflag){
-            getLongListInfo(&outputItems[dirIndex],folder,flags);
-        // }
-        dirIndex++;
+        getLongListInfo(&outputItems[dirIndex],folder,flags);
+        
     }
-    closedir(dp);
     return dirIndex;
 }
 
 /**
  * @brief The ls logic itself. Populates the structs above with information about folders and files in those
  * folders so we can print them.
+ * @return returns an error number.
  * @param flags: The flags string. Currently, no functionality for flags is implemented yet
- * @param argTargetCount: number of lsTargets passed in through argv. Not all can be used, since some may not exist or have bad permissions.
+ * @param argTargetCount: number of lsInputs passed in through argv. Not all can be used, since some may not exist or have bad permissions.
  * @param printTargetCount: number of directories we actually print the contents of. Modified by the function.
- * @param lsTargets: A 2d array of all the directories/items we need to try to run ls on
- * @param folders: A (blank) array of structs that contains information we need for printing the contents of a folder.
- *      Modified by function
+ * @param lsInputs: A 2d array of all the directories/items we need to try to run ls on
+ * @param lsOutputs: A (blank) array of structs that contains information we need for printing the contents of a folder.
+ *      
 */
-void ls(char* const flags, int argTargetCount, int* printTargetCount, char** const lsTargets, lsRequestedItem* folders){
+int ls(char* const flags, int argTargetCount, int* printTargetCount, char** const lsInputs, lsRequestedItem* lsOutputs){
     struct dirent* dirp;
+    bool isDir = true;
     DIR* dp;
     *printTargetCount = argTargetCount;
+    int error_number = 0;
     //main loop. ls for one directory at a time
     for(int i = 0; i < argTargetCount; i++){
         //get number of items in the directory. We need this number so that we know how much space to alloc
         //for the struct. Accounts for all items, even ones we don't print
-        size_t totalItemsInDir = 0;
-        dp = opendir(lsTargets[i]);
-        if(!dp){
-            //we cannot open this directory, so move on to the next one.
-            fprintf(stderr,"ls: cannot access '%s': %s",lsTargets[i],strerror(errno));
-            if(i < argTargetCount){
-                printf("\n");
-            }
-            (*printTargetCount)--;
-            //If we cannot access the directory, we cannot print it
-            folders[i].doWePrint = false;
-            continue;
+        int totalItemsInDir = 0;
+        //assume requested item is a directory. But we should check if it's a file before "failing"
+        dp = opendir(lsInputs[i]);
+        if(errno == ENOTDIR){
+            // printf("Not a dir\n");
+            isDir = false;
         }
-        else{
-            //count number of items in the directory
+        //error unrelated to whether or not the requested item is a directory
+        else if(errno != ENOTDIR){  
+            isDir = true;
+            if(!dp){
+                fprintf(stderr,"ls: cannot access ls '%s': %s",lsInputs[i],strerror(errno));
+                if(i < argTargetCount){
+                    printf("\n");
+                }
+                (*printTargetCount)--;
+                //If we cannot access the directory, we cannot print it
+                lsOutputs[i].doWePrint = false;
+                error_number = 2;
+                continue;
+            }
+        }
+
+        // if(!dp){
+        //     if(errno != ENOTDIR){
+        //         //we cannot open this directory, so move on to the next 
+        //         fprintf(stderr,"ls: cannot access ls '%s': %s",lsInputs[i],strerror(errno));
+        //         if(i < argTargetCount){
+        //             printf("\n");
+        //         }
+        //         (*printTargetCount)--;
+        //         //If we cannot access the directory, we cannot print it
+        //         lsOutputs[i].doWePrint = false;
+        //         error_number = 2;
+        //         continue;
+        //     }
+        //     else if(errno == ENOTDIR){
+        //         isDir = false;
+        //     }
+        // }
+        // else{
+        //count number of items in the directory
+        if(isDir == true){
             while((dirp = readdir(dp)) != NULL){
                 totalItemsInDir++;
             }
         }
-         //if we pass more than one directory, list the path above the contents of that directory
-        if(dp != NULL && argTargetCount>1){
-            folders[i].showPath = true;
+        else {  //if not a dir, we still need to account for the item
+            totalItemsInDir++;
+        }
+        // }
+         //if we pass more than one directory, list the path above the contents of that directory. Only list paths for directories
+        if(dp != NULL && argTargetCount > 1){
+            lsOutputs[i].showPath = true;
             //set the header equal to the dir path
-            folders[i].path = strndup(lsTargets[i],PATH_MAX);
+            lsOutputs[i].path = strndup(lsInputs[i],PATH_MAX);
         }
         else{
-            //valid folder, but just one, so don't list the path
-            folders[i].showPath = false;
+            //valid item, but just one, so don't list the path
+            lsOutputs[i].showPath = false;
         }
         closedir(dp);
 
         //allocate space for info for each item in dir
-        folders[i].items = (itemInDir*)malloc(totalItemsInDir*sizeof(itemInDir));
-        folders[i].widths.groupWidth = 0;
-        folders[i].widths.hardLinksWidth = 0;
-        folders[i].widths.nameWidth = 0;
-        folders[i].widths.ownerWidth = 0;
-        folders[i].widths.sizeWidth = 0;
-        folders[i].itemCount = whichItems(lsTargets[i],flags,folders[i].items,&folders[i]);
+        lsOutputs[i].items = (itemInDir*)malloc(totalItemsInDir*sizeof(itemInDir));
+        lsOutputs[i].widths.groupWidth = 0;
+        lsOutputs[i].widths.hardLinksWidth = 0;
+        lsOutputs[i].widths.nameWidth = 0;
+        lsOutputs[i].widths.ownerWidth = 0;
+        lsOutputs[i].widths.sizeWidth = 0;
+        lsOutputs[i].itemCount = getItemInfo(lsInputs[i],flags,lsOutputs[i].items,&lsOutputs[i]);
 
-        folders[i].doWePrint = true;
+        lsOutputs[i].doWePrint = true;
     }
-
+    return error_number;
 }
-
-void trimTime(char* timeString, char* outputString){
-    for(int i = 4; i < 16; i++){
-        outputString[i-4] = timeString[i];
-    }
-    // printf("Time string: %s",timeString);
-    // printf("Output string: %s\n",outputString);
-}
-
-int sortByName(const void* name1, const void* name2){
-    return strcmp( ((itemInDir*) name1)->name,((itemInDir*) name2)->name);
-}
-
-int sortFoldersByName(const void* name1, const void* name2){
-    return strcmp( ((itemInDir*) name1)->name,((itemInDir*) name2)->name);
-}
-
-int sortBySize(const void* item1, const void* item2){
-    return ((itemInDir*) item1)->itemStat.st_size < ((itemInDir*) item2)->itemStat.st_size;
-}
-
-//sort by modified time
-int sortByMtime(const void* item1, const void* item2){
-    int cond = ((itemInDir*) item1)->itemStat.st_mtime < ((itemInDir*) item2)->itemStat.st_mtime;
-    if(cond == 1){
-        return 1;
-    }
-    else if(((itemInDir*) item1)->itemStat.st_mtime > ((itemInDir*) item2)->itemStat.st_mtime){
-        return 0;
-    }
-    else {
-        return ((itemInDir*) item1) - ((itemInDir*) item2);
-    }
-    // return ((itemInDir*) item1)->itemStat.st_mtime < ((itemInDir*) item2)->itemStat.st_mtime;
-}
-
-//sort by access time
-int sortByAtime(const void* item1, const void* item2){
-                                                // <= makes this comparison actually correct
-    return ((itemInDir*) item1)->itemStat.st_atime <= ((itemInDir*) item2)->itemStat.st_atime;
-}
-
-//sort by status change time
-int sortByCtime(const void* item1, const void* item2){
-                                                // <= makes this comparison actually correct
-    return ((itemInDir*) item1)->itemStat.st_ctime < ((itemInDir*) item2)->itemStat.st_ctime;
-}
-
-/**
- * @brief Using the folder structs and the flags, sort the folder structs according to the flags
- * @param folders: lsRequestedItem structs to be sorted
- * @param flags: processed argv input flags
- */
-void sortOutput(lsRequestedItem* folders, char* const flags){
-    // printf("Flags: %s\n",flags);
-    qsort((folders)->items,(folders)->itemCount,sizeof(itemInDir),sortByName);
-}
-
-//used for sorting names for table printing
-int sortNames(const void* name1, const void* name2){
-    return ((nameAndLen*) name1)->len < ((nameAndLen*) name2)->len;
-}
-
-int sortLengths(const void* item1, const void* item2){
-    return ((itemInDir*) item1)->nameLength < ((itemInDir*) item2)->nameLength;
-}
-
-
 
 //table printing
 void createPrintConfig(itemInDir* items, int numItems, int* finalRowCount, int* finalColCount){
@@ -472,7 +481,11 @@ void createPrintConfig(itemInDir* items, int numItems, int* finalRowCount, int* 
         }
         //check the total width of one row created by the total widths for all the columns
         usedWidth = -2;
+        if(numItems == 0){
+            numItems = 1;
+        }
         for(int i = 0; i < colCount; i++){
+
             usedWidth += items[min(i*rowCount,numItems-1)].nameWidthPadding + strlen(items[min(i*rowCount,numItems-1)].name);
         }
         //if the width created is greater than the max width, take away one column. Remake the previous configuration
@@ -528,6 +541,7 @@ void createPrintConfig(itemInDir* items, int numItems, int* finalRowCount, int* 
  */
 void longFormatPrint(lsRequestedItem* printableFolders, int startIndex, int step, int numItems, int i){
     for(int j = startIndex; step == -1 ? j >= 0 : j < numItems; j += step){
+        printableFolders[i].items[j].pointsToDir = false;   //makes valgrind happy
         char timeString[64];
         if(printableFolders[i].items[j].lstatSuccessful == false){
             strncpy(timeString,"           ?",13);
@@ -791,15 +805,15 @@ void printLS(int argTargetCount, int printTargetCount, lsRequestedItem* folders,
 }
 
 int main(int argc, char* argv[]){
-    char** lsTargets = malloc((argc+1)*sizeof(*lsTargets));
+    char** lsInputs = malloc((argc+1)*sizeof(*lsInputs));
 
     //gonna change argument handling to getopt() eventually
 
     char flags[1024] = {'0'};
 
     int flagCount = 0;
-    int argTargetCount = 0;       //number of lsTargets passed in through argv
-    int printTargetCount = 0;     //number of lsTargets that we can actually print
+    int argTargetCount = 0;       //number of lsInputs passed in through argv
+    int printTargetCount = 0;     //number of lsInputs that we can actually print
 
     int opt;
     //used to get order/position of argument
@@ -868,22 +882,23 @@ int main(int argc, char* argv[]){
 
     }
 
-    getFlagsAndDirs(argc,argv,flags,lsTargets,&flagCount,&argTargetCount);
+    getFlagsAndDirs(argc,argv,flags,lsInputs,&flagCount,&argTargetCount);
     //run ls on the current dirctory if we don't provide any directory arguments
     if(argTargetCount<1){
-        lsTargets[0] = malloc(2); //"."
-        memcpy(lsTargets[0],".",2);
+        lsInputs[0] = malloc(2); //"."
+        memcpy(lsInputs[0],".",2);
         argTargetCount = 1;
     }
-    //allocate space in case we need to print all the lsTargets.
+    //allocate space in case we need to print all the lsInputs.
     lsRequestedItem* folders = malloc(argTargetCount*sizeof(lsRequestedItem));
-    ls(flags,argTargetCount,&printTargetCount,lsTargets,folders);
+    int retcode = ls(flags,argTargetCount,&printTargetCount,lsInputs,folders);
     printLS(argTargetCount,printTargetCount,folders,flags);
     free(folders);
 
     //cleanup (kinda)
     for(int i = 0; i < argc; i++){
-        free(lsTargets[i]);
+        free(lsInputs[i]);
     }
-    free(lsTargets);
+    free(lsInputs);
+    return retcode;
 }

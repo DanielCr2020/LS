@@ -23,6 +23,10 @@ typedef struct widthInfo {
     int nameWidth;      //used for pretty table printing
 } widthInfo;
 
+enum file_types {
+    REGULAR_FILE, DIRECTORY, EXECUTABLE, LINK
+};
+
 //these will be populated with information from ls(), and then sorted and printed
 
 //Contains information about each file in a directory
@@ -34,13 +38,13 @@ typedef struct itemInDir {
 
     struct stat itemStat;   //stat information for each file in a directory
 
-    char* fileType; //?
     char permissions[10];  //permissions of the file
     int hardLinksCount;
     char* owner;
     char* group;
     bool lstatSuccessful;
     char* link;     //where the link points to if the file is a link
+    //change to point to file type
     bool pointsToDir;   //if the file is a link, then does the file point to a directory?
     bool isLink;
     bool isExecutable;
@@ -80,9 +84,9 @@ void getLinkInfo(itemInDir* item, struct stat fileStat, bool secondCall);
 
 void getLongListInfo(itemInDir* item, lsRequestedItem* folder, char* flags);
 
-int whichItems(char* const dir, char* const flags, itemInDir* outputItems, lsRequestedItem* folder);
+int getItemInfo(char* const dir, char* const flags, itemInDir* outputItems, lsRequestedItem* folder);
 
-void ls(char* const flags, int argDirCount, int* printDirCount, char** const dirs, lsRequestedItem* folders);
+int ls(char* const flags, int argDirCount, int* printDirCount, char** const dirs, lsRequestedItem* folders);
 
 void trimTime(char* timeString, char* outputString);
 
